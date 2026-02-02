@@ -16,11 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SupportAgent
@@ -185,7 +183,7 @@ fun SettingsPage(
 //                .padding(bottom = 18.dp),
 //        ) {
 //            Text(
-//                text = "模型名称：Deepseek Chat",
+//                text = "模型名称：DeepSeek Chat",
 //                color = colors.onSurfaceVariant,
 //                style = MaterialTheme.typography.labelMedium,
 //            )
@@ -434,7 +432,7 @@ private fun AppearanceDialog(
         },
         text = {
             Column {
-                AppearanceOption.values().forEach { option ->
+                AppearanceOption.entries.forEach { option ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier

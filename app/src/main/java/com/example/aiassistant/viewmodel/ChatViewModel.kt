@@ -6,12 +6,18 @@ import com.example.aiassistant.data.model.ChatFileType
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.ChatRole
 import com.example.aiassistant.data.model.ChatUiState
+import com.example.aiassistant.data.model.AttachmentTransferStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
 import javax.inject.Inject
+import kotlin.random.Random
 
 @HiltViewModel
 class ChatViewModel @Inject constructor() : ViewModel() {
@@ -19,8 +25,12 @@ class ChatViewModel @Inject constructor() : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    private val attachmentJobs = mutableMapOf<String, Job>()
+
     fun newChat() {
         _uiState.update { it.copy(messages = emptyList(), inputText = "", errorMessage = null) }
+        attachmentJobs.values.forEach { it.cancel() }
+        attachmentJobs.clear()
     }
 
     fun setInputText(text: String) {
@@ -60,23 +70,27 @@ class ChatViewModel @Inject constructor() : ViewModel() {
         widthPx: Int? = null,
         heightPx: Int? = null,
     ) {
+        val message = ChatMessage(
+            role = ChatRole.User,
+            parts = listOf(
+                ChatMessagePart.Image(
+                    contentUri = contentUri,
+                    mimeType = mimeType,
+                    widthPx = widthPx,
+                    heightPx = heightPx,
+                    transferStatus = AttachmentTransferStatus.Uploading,
+                    progress = 0f,
+                ),
+            ),
+        )
+
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
-            newMessages.add(
-                ChatMessage(
-                    role = ChatRole.User,
-                    parts = listOf(
-                        ChatMessagePart.Image(
-                            contentUri = contentUri,
-                            mimeType = mimeType,
-                            widthPx = widthPx,
-                            heightPx = heightPx,
-                        ),
-                    ),
-                ),
-            )
+            newMessages.add(message)
             state.copy(messages = newMessages)
         }
+
+        startSimulateAttachmentFlow(messageId = message.id, contentUri = contentUri)
     }
 
     fun sendFile(
@@ -85,24 +99,46 @@ class ChatViewModel @Inject constructor() : ViewModel() {
         mimeType: String? = null,
         sizeBytes: Long? = null,
     ) {
+        val message = ChatMessage(
+            role = ChatRole.User,
+            parts = listOf(
+                ChatMessagePart.File(
+                    contentUri = contentUri,
+                    fileName = fileName,
+                    fileType = guessFileType(fileName = fileName, mimeType = mimeType),
+                    mimeType = mimeType,
+                    sizeBytes = sizeBytes,
+                    transferStatus = AttachmentTransferStatus.Uploading,
+                    progress = 0f,
+                ),
+            ),
+        )
+
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
-            newMessages.add(
-                ChatMessage(
-                    role = ChatRole.User,
-                    parts = listOf(
-                        ChatMessagePart.File(
-                            contentUri = contentUri,
-                            fileName = fileName,
-                            fileType = guessFileType(fileName = fileName, mimeType = mimeType),
-                            mimeType = mimeType,
-                            sizeBytes = sizeBytes,
-                        ),
-                    ),
-                ),
-            )
+            newMessages.add(message)
             state.copy(messages = newMessages)
         }
+
+        startSimulateAttachmentFlow(messageId = message.id, contentUri = contentUri)
+    }
+
+    fun retryAttachment(messageId: String) {
+        val msg = _uiState.value.messages.firstOrNull { it.id == messageId } ?: return
+        val targetUri = when (val p = msg.parts.firstOrNull()) {
+            is ChatMessagePart.Image -> p.contentUri
+            is ChatMessagePart.File -> p.contentUri
+            else -> return
+        }
+
+        updateAttachmentPart(
+            messageId = messageId,
+            contentUri = targetUri,
+            status = AttachmentTransferStatus.Uploading,
+            progress = 0f,
+        )
+
+        startSimulateAttachmentFlow(messageId = messageId, contentUri = targetUri)
     }
 
     private fun guessFileType(fileName: String, mimeType: String?): ChatFileType {
@@ -121,5 +157,77 @@ class ChatViewModel @Inject constructor() : ViewModel() {
 
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    private fun startSimulateAttachmentFlow(messageId: String, contentUri: String) {
+        attachmentJobs.remove(messageId)?.cancel()
+
+        attachmentJobs[messageId] = viewModelScope.launch {
+            var p = 0f
+            while (p < 1f) {
+                delay(180)
+                p = (p + 0.12f).coerceAtMost(1f)
+                updateAttachmentPart(
+                    messageId = messageId,
+                    contentUri = contentUri,
+                    status = AttachmentTransferStatus.Uploading,
+                    progress = p,
+                )
+            }
+
+            updateAttachmentPart(
+                messageId = messageId,
+                contentUri = contentUri,
+                status = AttachmentTransferStatus.Processing,
+                progress = null,
+            )
+
+            delay(650)
+
+            val ok = Random.nextFloat() >= 0.15f
+            updateAttachmentPart(
+                messageId = messageId,
+                contentUri = contentUri,
+                status = if (ok) AttachmentTransferStatus.Done else AttachmentTransferStatus.Failed,
+                progress = null,
+            )
+        }
+    }
+
+    private fun updateAttachmentPart(
+        messageId: String,
+        contentUri: String,
+        status: AttachmentTransferStatus,
+        progress: Float?,
+    ) {
+        _uiState.update { state ->
+            val idx = state.messages.indexOfFirst { it.id == messageId }
+            if (idx < 0) return@update state
+
+            val msg = state.messages[idx]
+            val newParts = msg.parts.map { part ->
+                when (part) {
+                    is ChatMessagePart.Image ->
+                        if (part.contentUri == contentUri) {
+                            part.copy(transferStatus = status, progress = progress)
+                        } else {
+                            part
+                        }
+
+                    is ChatMessagePart.File ->
+                        if (part.contentUri == contentUri) {
+                            part.copy(transferStatus = status, progress = progress)
+                        } else {
+                            part
+                        }
+
+                    else -> part
+                }
+            }
+
+            val newMessages = state.messages.toMutableList()
+            newMessages[idx] = msg.copy(parts = newParts)
+            state.copy(messages = newMessages)
+        }
     }
 }

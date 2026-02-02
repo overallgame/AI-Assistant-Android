@@ -118,7 +118,6 @@ fun AppRoot(modifier: Modifier = Modifier) {
                     AppScreen.Chat -> {
                         ChatPage(
                             onOpenDrawer = { scope.launch { drawerState.open() } },
-                            onOpenSettings = { screenState.value = AppScreen.Settings },
                             onNewChat = {},
                             onPickImage = { screenState.value = AppScreen.ImagePicker },
                             onPickFile = { screenState.value = AppScreen.FilePicker },

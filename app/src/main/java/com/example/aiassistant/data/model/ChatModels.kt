@@ -13,6 +13,13 @@ enum class MessageSendStatus {
     Failed,
 }
 
+enum class AttachmentTransferStatus {
+    Uploading,
+    Processing,
+    Done,
+    Failed,
+}
+
 enum class ChatFileType {
     Pdf,
     Word,
@@ -31,6 +38,8 @@ sealed interface ChatMessagePart {
         val mimeType: String? = null,
         val widthPx: Int? = null,
         val heightPx: Int? = null,
+        val transferStatus: AttachmentTransferStatus = AttachmentTransferStatus.Done,
+        val progress: Float? = null,
     ) : ChatMessagePart
 
     data class File(
@@ -39,6 +48,8 @@ sealed interface ChatMessagePart {
         val fileType: ChatFileType = ChatFileType.Other,
         val mimeType: String? = null,
         val sizeBytes: Long? = null,
+        val transferStatus: AttachmentTransferStatus = AttachmentTransferStatus.Done,
+        val progress: Float? = null,
     ) : ChatMessagePart
 }
 

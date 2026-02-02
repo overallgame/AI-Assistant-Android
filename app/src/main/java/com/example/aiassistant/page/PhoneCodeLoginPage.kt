@@ -60,7 +60,7 @@ fun PhoneCodeLoginPage(
 ) {
     val focusManager = LocalFocusManager.current
     val codeFocusRequester = remember { FocusRequester() }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackBarHostState = remember { SnackbarHostState() }
 
     val colors = MaterialTheme.colorScheme
 
@@ -79,12 +79,12 @@ fun PhoneCodeLoginPage(
 
     LaunchedEffect(uiState.errorMessage, uiState.infoMessage) {
         val message = uiState.errorMessage ?: uiState.infoMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
+        snackBarHostState.showSnackbar(message)
         authViewModel.clearMessages()
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = { SnackbarHost(hostState = snackBarHostState) },
         containerColor = colors.background,
     ) { innerPadding ->
         Column(
