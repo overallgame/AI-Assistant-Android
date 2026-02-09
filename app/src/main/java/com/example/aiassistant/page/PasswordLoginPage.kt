@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -31,6 +32,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -72,14 +74,13 @@ fun PasswordLoginPage(
     val password = rememberSaveable { mutableStateOf("") }
     val passwordVisible = rememberSaveable { mutableStateOf(false) }
     val uiState by authViewModel.uiState.collectAsState()
-
-    val phoneDigits = phone.value.filter { it.isDigit() }
-    val canLogin = !uiState.isLoading && phoneDigits.length == 11 && password.value.length >= 6
-
-    LaunchedEffect(uiState.errorMessage) {
-        val message = uiState.errorMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
-        authViewModel.clearError()
+    val tryLogin: () -> Unit = {
+        focusManager.clearFocus()
+        authViewModel.loginWithPassword(
+            phone = phone.value,
+            password = password.value,
+            onSuccess = onLoginSuccess,
+        )
     }
 
     Scaffold(
@@ -218,14 +219,7 @@ fun PasswordLoginPage(
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        if (canLogin) {
-                            focusManager.clearFocus()
-                            authViewModel.loginWithPassword(
-                                phone = phone.value,
-                                password = password.value,
-                                onSuccess = onLoginSuccess,
-                            )
-                        }
+                        tryLogin()
                     },
                 ),
                 placeholder = { Text(text = "密码") },
@@ -292,14 +286,9 @@ fun PasswordLoginPage(
 
             Button(
                 onClick = {
-                    focusManager.clearFocus()
-                    authViewModel.loginWithPassword(
-                        phone = phone.value,
-                        password = password.value,
-                        onSuccess = onLoginSuccess,
-                    )
+                    tryLogin()
                 },
-                enabled = canLogin,
+                enabled = !uiState.isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
@@ -312,7 +301,32 @@ fun PasswordLoginPage(
                 Text(text = if (uiState.isLoading) "登录中..." else "登录")
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            if (uiState.errorMessage != null) {
+                AlertDialog(
+                    onDismissRequest = { authViewModel.clearError() },
+                    title = {
+                        Text(
+                            text = "提示",
+                            color = colors.onSurface,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = uiState.errorMessage.orEmpty(),
+                            color = colors.onSurface,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { authViewModel.clearError() }) {
+                            Text(text = "知道了")
+                        }
+                    },
+                    containerColor = colors.surface,
+                )
+            }
         }
     }
 }

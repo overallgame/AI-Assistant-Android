@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -30,6 +31,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,17 +72,12 @@ fun PhoneCodeLoginPage(
 
     val phoneDigits = phone.value.filter { it.isDigit() }
     val codeDigits = code.value.filter { it.isDigit() }
-    val hasSentCode =
-        uiState.codeSentToPhoneDigits == phoneDigits && uiState.codeSentAtEpochMs != null
-    val canSendCode =
-        !uiState.isLoading && uiState.codeSecondsRemaining == 0 && phoneDigits.length == 11
-    val canLogin =
-        !uiState.isLoading && hasSentCode && phoneDigits.length == 11 && codeDigits.length == 6
+    val canSendCode = !uiState.isLoading && uiState.codeSecondsRemaining == 0
 
-    LaunchedEffect(uiState.errorMessage, uiState.infoMessage) {
-        val message = uiState.errorMessage ?: uiState.infoMessage ?: return@LaunchedEffect
+    LaunchedEffect(uiState.infoMessage) {
+        val message = uiState.infoMessage ?: return@LaunchedEffect
         snackBarHostState.showSnackbar(message)
-        authViewModel.clearMessages()
+        authViewModel.clearInfo()
     }
 
     Scaffold(
@@ -155,9 +152,7 @@ fun PhoneCodeLoginPage(
                 ),
                 keyboardActions = KeyboardActions(
                     onNext = {
-                        if (canSendCode) {
-                            authViewModel.sendCode(phone.value)
-                        }
+                        if (canSendCode) authViewModel.sendCode(phone.value)
                         codeFocusRequester.requestFocus()
                     },
                 ),
@@ -226,7 +221,7 @@ fun PhoneCodeLoginPage(
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            if (canLogin) {
+                            if (!uiState.isLoading) {
                                 focusManager.clearFocus()
                                 authViewModel.loginWithCode(
                                     phone = phone.value,
@@ -300,7 +295,7 @@ fun PhoneCodeLoginPage(
                         onSuccess = onLoginSuccess,
                     )
                 },
-                enabled = canLogin,
+                enabled = !uiState.isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
@@ -311,6 +306,33 @@ fun PhoneCodeLoginPage(
                 ),
             ) {
                 Text(text = if (uiState.isLoading) "登录中..." else "登录")
+            }
+
+            if (uiState.errorMessage != null) {
+                AlertDialog(
+                    onDismissRequest = { authViewModel.clearError() },
+                    title = {
+                        Text(
+                            text = "提示",
+                            color = colors.onSurface,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = uiState.errorMessage.orEmpty(),
+                            color = colors.onSurface,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { authViewModel.clearError() }) {
+                            Text(text = "知道了")
+                        }
+                    },
+                    containerColor = colors.surface,
+                )
             }
         }
     }

@@ -43,6 +43,10 @@ class AuthViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = null, infoMessage = null) }
     }
 
+    fun clearInfo() {
+        _uiState.update { it.copy(infoMessage = null) }
+    }
+
     fun sendCode(phone: String) {
         val normalized = phone.filter { it.isDigit() }
         if (normalized.length != 11) {
@@ -77,17 +81,13 @@ class AuthViewModel @Inject constructor(
             return
         }
 
-        val sentTo = _uiState.value.codeSentToPhoneDigits
         val sentAt = _uiState.value.codeSentAtEpochMs
-        if (sentTo == null || sentAt == null || sentTo != normalizedPhone) {
-            _uiState.update { it.copy(errorMessage = "请先发送验证码") }
-            return
-        }
-
-        val now = System.currentTimeMillis()
-        if (now - sentAt > codeTtlMs) {
-            _uiState.update { it.copy(errorMessage = "验证码已过期，请重新获取") }
-            return
+        if (sentAt != null) {
+            val now = System.currentTimeMillis()
+            if (now - sentAt > codeTtlMs) {
+                _uiState.update { it.copy(errorMessage = "验证码已过期，请重新获取") }
+                return
+            }
         }
 
         if (normalizedCode != mockSmsCode) {
