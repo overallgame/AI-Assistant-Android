@@ -66,7 +66,7 @@ fun SettingsPage(
 
     val userState by viewModel.userState.collectAsState()
     val appearanceOption = userState.preferences.appearance.toAppearanceOption()
-    val phoneMasked = userState.user?.phoneMasked
+    val phoneMasked = maskPhoneForDisplay(userState.user?.phoneE164 ?: userState.user?.phoneMasked)
 
     val colors = MaterialTheme.colorScheme
 
@@ -164,6 +164,14 @@ fun SettingsPage(
                     value = null,
                     onClick = { infoDialogTitle.value = "联系我们" },
                 ),
+            ),
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        SettingsSection(
+            title = "登录",
+            items = listOf(
                 SettingsRowModel(
                     icon = Icons.AutoMirrored.Filled.Logout,
                     title = "退出登录",
@@ -174,31 +182,12 @@ fun SettingsPage(
             ),
         )
 
-//        Spacer(modifier = Modifier.weight(1f))
-//
-//        Column(
-//            horizontalAlignment = Alignment.CenterHorizontally,
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .padding(bottom = 18.dp),
-//        ) {
-//            Text(
-//                text = "模型名称：DeepSeek Chat",
-//                color = colors.onSurfaceVariant,
-//                style = MaterialTheme.typography.labelMedium,
-//            )
-//            Spacer(modifier = Modifier.height(6.dp))
-//            Text(
-//                text = "内容由AI生成，请仔细甄别，并合法使用",
-//                color = colors.onSurfaceVariant,
-//                style = MaterialTheme.typography.labelSmall,
-//            )
-//        }
-
         if (showAppearanceDialog.value) {
             AppearanceDialog(
                 selected = appearanceDialogSelection.value,
-                onSelect = { appearanceDialogSelection.value = it },
+                onSelect = { option ->
+                    appearanceDialogSelection.value = option
+                },
                 onConfirm = {
                     showAppearanceDialog.value = false
                     val newValue = appearanceDialogSelection.value.toAppearancePreference()
@@ -298,6 +287,23 @@ private fun AppearanceOption.toAppearancePreference(): AppearancePreference {
     }
 }
 
+private fun maskPhoneForDisplay(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    var digits = raw.filter { it.isDigit() }
+    if (digits.length > 11) {
+        if (digits.startsWith("0086")) {
+            digits = digits.drop(4)
+        } else if (digits.startsWith("86")) {
+            digits = digits.drop(2)
+        }
+    }
+    if (digits.length < 5) return raw
+
+    val prefix = digits.take(3)
+    val suffix = digits.takeLast(2)
+    return "$prefix****$suffix"
+}
+
 private data class SettingsRowModel(
     val icon: ImageVector,
     val title: String,
@@ -313,12 +319,12 @@ private fun SettingsSection(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier = modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = title,
             color = colors.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         )
 
         Surface(
@@ -363,7 +369,7 @@ private fun SettingsRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -457,6 +463,11 @@ private fun AppearanceDialog(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(text = "确认")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "取消")
             }
         },
         containerColor = colors.surface,

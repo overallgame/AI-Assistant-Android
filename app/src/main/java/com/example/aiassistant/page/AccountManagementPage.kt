@@ -1,6 +1,12 @@
 package com.example.aiassistant.page
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,10 +42,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import com.example.aiassistant.data.model.Avatar
 import com.example.aiassistant.data.model.AvatarType
 import com.example.aiassistant.viewmodel.SettingsViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +75,41 @@ fun AccountManagementPage(
 
     val showEditNameDialog = remember { mutableStateOf(false) }
     val nameDraft = remember { mutableStateOf("") }
-    val showAvatarDialog = remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val pickAvatarLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+                viewModel.setAvatar(Avatar(type = AvatarType.LocalUri, value = uri.toString()))
+            }
+        },
+    )
+
+    val localAvatarBitmap by produceState<Bitmap?>(
+        initialValue = null,
+        key1 = user?.avatar?.type,
+        key2 = user?.avatar?.value,
+    ) {
+        val avatar = user?.avatar
+        if (avatar?.type != AvatarType.LocalUri || avatar.value.isNullOrBlank()) {
+            value = null
+            return@produceState
+        }
+
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openInputStream(android.net.Uri.parse(avatar.value))
+                    ?.use { input -> BitmapFactory.decodeStream(input) }
+            }.getOrNull()
+        }
+    }
 
     val colors = MaterialTheme.colorScheme
 
@@ -105,14 +151,23 @@ fun AccountManagementPage(
                 contentAlignment = Alignment.BottomEnd,
                 modifier = Modifier
                     .size(88.dp)
-                    .clickable(onClick = { showAvatarDialog.value = true }),
+                    .clickable(onClick = { pickAvatarLauncher.launch(arrayOf("image/*")) }),
             ) {
                 Surface(
                     shape = CircleShape,
                     color = avatarColor(user?.avatar),
                     border = BorderStroke(1.dp, colors.outlineVariant),
                     modifier = Modifier.fillMaxSize(),
-                ) {}
+                ) {
+                    if (localAvatarBitmap != null) {
+                        Image(
+                            bitmap = localAvatarBitmap!!.asImageBitmap(),
+                            contentDescription = "Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
 
                 Surface(
                     shape = CircleShape,
@@ -188,35 +243,18 @@ fun AccountManagementPage(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
         ) {
-            Text(
-                text = "登出所有设备",
-                color = colors.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = { })
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Surface(
-            color = colors.surface,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-        ) {
-            Text(
-                text = "注销账号",
-                color = colors.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = { })
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DangerActionRow(
+                    title = "登出所有设备",
+                    onClick = { },
+                    showDivider = true,
+                )
+                DangerActionRow(
+                    title = "注销账号",
+                    onClick = { },
+                    showDivider = false,
+                )
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -266,64 +304,6 @@ fun AccountManagementPage(
                 containerColor = colors.surface,
             )
         }
-
-        if (showAvatarDialog.value) {
-            AlertDialog(
-                onDismissRequest = { showAvatarDialog.value = false },
-                title = {
-                    Text(
-                        text = "选择头像",
-                        color = colors.onSurface,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                text = {
-                    Column {
-                        AvatarOptionRow(label = "蓝色") {
-                            showAvatarDialog.value = false
-                            viewModel.setAvatar(Avatar(type = AvatarType.Default, value = "Blue"))
-                        }
-                        AvatarOptionRow(label = "紫色") {
-                            showAvatarDialog.value = false
-                            viewModel.setAvatar(Avatar(type = AvatarType.Default, value = "Purple"))
-                        }
-                        AvatarOptionRow(label = "灰色") {
-                            showAvatarDialog.value = false
-                            viewModel.setAvatar(Avatar(type = AvatarType.Default, value = "Gray"))
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showAvatarDialog.value = false }) {
-                        Text(text = "关闭")
-                    }
-                },
-                containerColor = colors.surface,
-            )
-        }
-    }
-}
-
-@Composable
-private fun AvatarOptionRow(
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-    ) {
-        Text(
-            text = label,
-            color = colors.onSurface,
-            style = MaterialTheme.typography.bodyLarge,
-        )
     }
 }
 
@@ -406,12 +386,64 @@ private fun AccountRow(
     }
 }
 
+@Composable
+private fun DangerActionRow(
+    title: String,
+    onClick: () -> Unit,
+    showDivider: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Text(
+                text = title,
+                color = colors.error,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        if (showDivider) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(colors.outlineVariant),
+            )
+        }
+    }
+}
+
 private fun maskPhoneForDisplay(raw: String?): String {
     if (raw.isNullOrBlank()) return ""
-    val digits = raw.filter { it.isDigit() }
+    var digits = raw.filter { it.isDigit() }
+    if (digits.length > 11) {
+        if (digits.startsWith("0086")) {
+            digits = digits.drop(4)
+        } else if (digits.startsWith("86")) {
+            digits = digits.drop(2)
+        }
+    }
     if (digits.length < 5) return raw
 
     val prefix = digits.take(3)
     val suffix = digits.takeLast(2)
-    return "$prefix*****$suffix"
+    return "$prefix****$suffix"
 }

@@ -1,5 +1,13 @@
 package com.example.aiassistant.page
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
@@ -31,6 +39,21 @@ private enum class AppScreen {
     FilePicker,
 }
 
+private fun screenOrder(screen: AppScreen): Int {
+    return when (screen) {
+        AppScreen.LoginEntry -> 0
+        AppScreen.PhoneCodeLogin -> 1
+        AppScreen.PasswordLogin -> 1
+        AppScreen.Chat -> 10
+        AppScreen.ImagePicker -> 11
+        AppScreen.FilePicker -> 11
+        AppScreen.Settings -> 20
+        AppScreen.AccountManagement -> 21
+        AppScreen.FontSize -> 21
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun AppRoot(modifier: Modifier = Modifier) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -65,7 +88,23 @@ fun AppRoot(modifier: Modifier = Modifier) {
         }
     }
 
-    when (screenState.value) {
+    AnimatedContent(
+        targetState = screenState.value,
+        transitionSpec = {
+            val forward = screenOrder(targetState) > screenOrder(initialState)
+            val direction = if (forward) 1 else -1
+            (slideInHorizontally(
+                animationSpec = tween(durationMillis = 220),
+                initialOffsetX = { fullWidth -> fullWidth * direction },
+            ) + fadeIn(animationSpec = tween(durationMillis = 220))) togetherWith
+                (slideOutHorizontally(
+                    animationSpec = tween(durationMillis = 220),
+                    targetOffsetX = { fullWidth -> -fullWidth * direction },
+                ) + fadeOut(animationSpec = tween(durationMillis = 220)))
+        },
+        label = "AppScreenSlideFade",
+    ) { targetScreen ->
+        when (targetScreen) {
         AppScreen.LoginEntry -> {
             LoginEntryPage(
                 onPhoneCodeLogin = { screenState.value = AppScreen.PhoneCodeLogin },
@@ -114,7 +153,7 @@ fun AppRoot(modifier: Modifier = Modifier) {
                 },
                 modifier = modifier,
             ) {
-                when (screenState.value) {
+                when (targetScreen) {
                     AppScreen.Chat -> {
                         ChatPage(
                             onOpenDrawer = { scope.launch { drawerState.open() } },
@@ -194,6 +233,7 @@ fun AppRoot(modifier: Modifier = Modifier) {
                 },
                 modifier = modifier,
             )
+        }
         }
     }
 }
