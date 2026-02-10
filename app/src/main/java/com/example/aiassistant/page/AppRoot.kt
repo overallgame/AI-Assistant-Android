@@ -53,7 +53,6 @@ private fun screenOrder(screen: AppScreen): Int {
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun AppRoot(modifier: Modifier = Modifier) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)

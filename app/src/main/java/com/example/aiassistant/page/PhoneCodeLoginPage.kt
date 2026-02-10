@@ -70,8 +70,8 @@ fun PhoneCodeLoginPage(
     val code = rememberSaveable { mutableStateOf("") }
     val uiState by authViewModel.uiState.collectAsState()
 
-    val phoneDigits = phone.value.filter { it.isDigit() }
-    val codeDigits = code.value.filter { it.isDigit() }
+    phone.value.filter { it.isDigit() }
+    code.value.filter { it.isDigit() }
     val canSendCode = !uiState.isLoading && uiState.codeSecondsRemaining == 0
 
     LaunchedEffect(uiState.infoMessage) {

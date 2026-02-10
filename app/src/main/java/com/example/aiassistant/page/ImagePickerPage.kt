@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Size
+import androidx.collection.LruCache
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -15,9 +16,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -36,7 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -44,11 +48,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.aiassistant.data.model.PickedImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,7 +117,15 @@ fun ImagePickerPage(
         value = result
     }
 
-    val selectedUris = remember { mutableStateListOf<Uri>() }
+    val selectedUriMap = remember { mutableStateMapOf<String, Uri>() }
+
+    val density = LocalDensity.current
+    val thumbSizePx = remember(density) {
+        with(density) { 128.dp.roundToPx() }
+    }
+    val thumbnailCache = remember {
+        object : LruCache<String, ImageBitmap>(200) {}
+    }
 
     Scaffold(
         topBar = {
@@ -126,7 +142,7 @@ fun ImagePickerPage(
                 actions = {
                     TextButton(
                         onClick = {
-                            val picked = selectedUris.map { uri ->
+                            val picked = selectedUriMap.values.map { uri ->
                                 PickedImage(
                                     contentUri = uri.toString(),
                                     mimeType = resolver.getType(uri),
@@ -134,9 +150,9 @@ fun ImagePickerPage(
                             }
                             onPicked(picked)
                         },
-                        enabled = selectedUris.isNotEmpty(),
+                        enabled = selectedUriMap.isNotEmpty(),
                     ) {
-                        Text(text = "完成(${selectedUris.size})")
+                        Text(text = "完成(${selectedUriMap.size})")
                     }
                 },
             )
@@ -172,21 +188,32 @@ fun ImagePickerPage(
             modifier = Modifier.fillMaxSize(),
         ) {
             items(items = imageUris, key = { it.toString() }) { uri ->
-                val isSelected = selectedUris.contains(uri)
+                val key = uri.toString()
+                val isSelected = selectedUriMap.containsKey(key)
 
-                val thumbBitmap by produceState<android.graphics.Bitmap?>(
-                    initialValue = null,
-                    key1 = uri
+                val thumbBitmap by produceState(
+                    initialValue = thumbnailCache[key],
+                    key1 = key,
                 ) {
-                    value = try {
-                        resolver.loadThumbnail(uri, Size(360, 360), null)
-                    } catch (_: Throwable) {
-                        null
+                    val cached = thumbnailCache[key]
+                    if (cached != null) {
+                        value = cached
+                        return@produceState
                     }
+
+                    value = withContext(Dispatchers.IO) {
+                        runCatching {
+                            resolver.loadThumbnail(uri, Size(thumbSizePx, thumbSizePx), null)
+                        }.getOrNull()?.asImageBitmap()
+                    }
+                    value?.let { thumbnailCache.put(key, it) }
                 }
 
                 Box(
                     modifier = Modifier
+                        .fillMaxWidth()
+                        .sizeIn(maxWidth = 140.dp, maxHeight = 140.dp)
+                        .aspectRatio(1f)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.surfaceVariant)
                         .border(
@@ -196,15 +223,15 @@ fun ImagePickerPage(
                         )
                         .clickable {
                             if (isSelected) {
-                                selectedUris.remove(uri)
+                                selectedUriMap.remove(key)
                             } else {
-                                selectedUris.add(uri)
+                                selectedUriMap[key] = uri
                             }
                         },
                 ) {
                     if (thumbBitmap != null) {
                         Image(
-                            bitmap = thumbBitmap!!.asImageBitmap(),
+                            bitmap = thumbBitmap!!,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),

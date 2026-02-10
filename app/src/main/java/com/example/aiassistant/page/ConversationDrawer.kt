@@ -187,6 +187,7 @@ fun ConversationDrawer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable(onClick = onOpenSettings)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 val displayName = uiState.userInfo.displayName?.takeIf { it.isNotBlank() }
@@ -195,9 +196,7 @@ fun ConversationDrawer(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clickable(onClick = onOpenSettings)
-                        .padding(vertical = 2.dp),
+                    modifier = Modifier.padding(vertical = 2.dp),
                 ) {
                     Surface(
                         color = colors.surfaceVariant,
@@ -232,13 +231,11 @@ fun ConversationDrawer(
                     }
                 }
 
-                IconButton(onClick = onOpenSettings) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = colors.onSurface,
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    tint = colors.onSurface,
+                )
             }
         }
 
