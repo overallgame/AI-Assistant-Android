@@ -1,12 +1,17 @@
 package com.example.aiassistant.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.aiassistant.config.AppConfig
 import com.example.aiassistant.data.model.ChatMessage
-import com.example.aiassistant.data.model.ChatFileType
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.ChatRole
 import com.example.aiassistant.data.model.ChatUiState
+import com.example.aiassistant.data.model.ChatFileType
 import com.example.aiassistant.data.model.AttachmentTransferStatus
+import com.example.aiassistant.data.model.WebSocketConnectionState
+import com.example.aiassistant.data.repository.ChatWebSocketRepository
+import com.example.aiassistant.data.websocket.WebSocketEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -15,17 +20,66 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import androidx.lifecycle.viewModelScope
+import java.util.UUID
 import javax.inject.Inject
 import kotlin.random.Random
 
 @HiltViewModel
-class ChatViewModel @Inject constructor() : ViewModel() {
+class ChatViewModel @Inject constructor(
+    private val webSocketRepository: ChatWebSocketRepository,
+    private val appConfig: AppConfig,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    val connectionState: StateFlow<WebSocketConnectionState>
+        get() = webSocketRepository.connectionState
+
     private val attachmentJobs = mutableMapOf<String, Job>()
+
+    init {
+        webSocketRepository.setServerUrl(appConfig.webSocketUrl)
+        observeWebSocketEvents()
+
+        if (appConfig.autoConnect) {
+            connect()
+        }
+    }
+
+    private fun observeWebSocketEvents() {
+        viewModelScope.launch {
+            webSocketRepository.events.collect { event ->
+                when (event) {
+                    is WebSocketEvent.MessageReceived -> {
+                        addAssistantMessage(event.message)
+                    }
+                    is WebSocketEvent.Error -> {
+                        _uiState.update { it.copy(errorMessage = event.message, isSending = false) }
+                    }
+                    is WebSocketEvent.Connected -> {
+                        _uiState.update { it.copy(errorMessage = null) }
+                    }
+                    is WebSocketEvent.Disconnected -> {}
+                    is WebSocketEvent.ChunkReceived -> {}
+                    is WebSocketEvent.DoneReceived -> {}
+                }
+            }
+        }
+    }
+
+    fun connect() {
+        webSocketRepository.connect()
+    }
+
+    fun disconnect() {
+        webSocketRepository.disconnect()
+    }
+
+    fun setServerUrl(url: String) {
+        appConfig.webSocketUrl = url
+        webSocketRepository.setServerUrl(url)
+    }
 
     fun newChat() {
         _uiState.update { it.copy(messages = emptyList(), inputText = "", errorMessage = null) }
@@ -45,23 +99,62 @@ class ChatViewModel @Inject constructor() : ViewModel() {
         _uiState.update { it.copy(mode = it.mode.copy(searchEnabled = !it.mode.searchEnabled)) }
     }
 
-    fun mockSendHello() {
+    fun sendMessage() {
+        val currentState = _uiState.value
+        val content = currentState.inputText.trim()
+        
+        if (content.isBlank() && currentState.messages.isEmpty()) {
+            return
+        }
+        
+        val userMessageId = UUID.randomUUID().toString()
+        val userMessage = ChatMessage(
+            id = userMessageId,
+            role = ChatRole.User,
+            parts = if (content.isNotBlank()) listOf(ChatMessagePart.Text(content)) else emptyList(),
+        )
+        
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
-            newMessages.add(
-                ChatMessage(
-                    role = ChatRole.User,
-                    parts = listOf(ChatMessagePart.Text("你好")),
-                ),
+            newMessages.add(userMessage)
+            state.copy(
+                messages = newMessages,
+                inputText = "",
+                isSending = true,
             )
-            newMessages.add(
-                ChatMessage(
-                    role = ChatRole.Assistant,
-                    parts = listOf(ChatMessagePart.Text("你好")),
-                ),
-            )
-            state.copy(messages = newMessages)
         }
+        
+        val messageId = UUID.randomUUID().toString()
+        
+        if (connectionState.value == WebSocketConnectionState.Connected) {
+            webSocketRepository.sendMessage(
+                content = content,
+                messageId = messageId,
+                thinkingEnabled = currentState.mode.thinkingEnabled,
+                searchEnabled = currentState.mode.searchEnabled,
+                attachments = emptyList(),
+            )
+        } else {
+            viewModelScope.launch {
+                webSocketRepository.connect()
+                delay(2000)
+                if (connectionState.value == WebSocketConnectionState.Connected) {
+                    webSocketRepository.sendMessage(
+                        content = content,
+                        messageId = messageId,
+                        thinkingEnabled = currentState.mode.thinkingEnabled,
+                        searchEnabled = currentState.mode.searchEnabled,
+                        attachments = emptyList(),
+                    )
+                } else {
+                    _uiState.update { it.copy(errorMessage = "无法连接到服务器", isSending = false) }
+                }
+            }
+        }
+    }
+    
+    fun mockSendHello() {
+        sendMessage()
     }
 
     fun sendImage(
@@ -158,6 +251,17 @@ class ChatViewModel @Inject constructor() : ViewModel() {
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
     }
+    
+    private fun addAssistantMessage(message: ChatMessage) {
+        _uiState.update { state ->
+            val newMessages = state.messages.toMutableList()
+            newMessages.add(message)
+            state.copy(
+                messages = newMessages,
+                isSending = false,
+            )
+        }
+    }
 
     private fun startSimulateAttachmentFlow(messageId: String, contentUri: String) {
         attachmentJobs.remove(messageId)?.cancel()
@@ -229,5 +333,10 @@ class ChatViewModel @Inject constructor() : ViewModel() {
             newMessages[idx] = msg.copy(parts = newParts)
             state.copy(messages = newMessages)
         }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        disconnect()
     }
 }

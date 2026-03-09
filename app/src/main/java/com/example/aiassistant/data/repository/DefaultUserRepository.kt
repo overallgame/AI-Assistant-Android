@@ -6,6 +6,7 @@ import com.example.aiassistant.data.model.FontSizePreference
 import com.example.aiassistant.data.model.LanguagePreference
 import com.example.aiassistant.data.model.User
 import com.example.aiassistant.data.model.UserPreferences
+import com.example.aiassistant.data.model.UserState
 import com.example.aiassistant.data.source.LocalUserDataSource
 import com.example.aiassistant.data.source.RemoteUserDataSource
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +16,7 @@ class DefaultUserRepository(
     private val remote: RemoteUserDataSource,
 ) : UserRepository {
 
-    override val userState: StateFlow<com.example.aiassistant.data.model.UserState> = local.userState
+    override val userState: StateFlow<UserState> = local.userState
 
     override suspend fun loginWithPhone(phoneE164: String): User {
         val user = remote.loginWithPhone(phoneE164)
@@ -36,7 +37,6 @@ class DefaultUserRepository(
     }
 
     override suspend fun updateDisplayName(displayName: String?) {
-        local.updateDisplayName(displayName)
         val currentUserId = local.userState.value.session.currentUserId ?: return
         val updatedUser = remote.updateDisplayName(currentUserId, displayName)
         local.setUser(updatedUser)
@@ -58,10 +58,16 @@ class DefaultUserRepository(
         val state = local.userState.value
         val newPrefs = transform(state.preferences)
 
-        local.updatePreferences(newPrefs)
-
-        val userId = state.session.currentUserId ?: return
-        val remotePrefs = remote.updatePreferences(userId, newPrefs)
-        local.updatePreferences(remotePrefs)
+        val userId = state.session.currentUserId
+        if (userId != null) {
+            try {
+                val remotePrefs = remote.updatePreferences(userId, newPrefs)
+                local.updatePreferences(remotePrefs)
+            } catch (e: Exception) {
+                local.updatePreferences(newPrefs)
+            }
+        } else {
+            local.updatePreferences(newPrefs)
+        }
     }
 }

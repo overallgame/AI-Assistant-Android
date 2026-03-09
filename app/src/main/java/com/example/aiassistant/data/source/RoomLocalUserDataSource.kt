@@ -61,9 +61,16 @@ class RoomLocalUserDataSource(
     }
 
     private suspend fun updateState(transform: (UserState) -> UserState) {
-        val newState = transform(userState.value)
         withContext(Dispatchers.IO) {
-            dao.upsert(newState.toEntity())
+            dao.getUserStateInTransaction()?.let { currentEntity ->
+                val currentState = currentEntity.toModel()
+                val newState = transform(currentState)
+                dao.upsert(newState.toEntity())
+            } ?: run {
+                val initialState = UserState()
+                val newState = transform(initialState)
+                dao.upsert(newState.toEntity())
+            }
         }
     }
 }

@@ -48,15 +48,15 @@ class ConversationDrawerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ConversationDrawerUiState())
 
     init {
-        refresh()
+        refresh(forceRefresh = false)
     }
 
-    fun refresh() {
+    fun refresh(forceRefresh: Boolean = true) {
         viewModelScope.launch {
             isLoading.value = true
             errorMessage.value = null
             try {
-                groups.value = conversationRepository.fetchConversationGroups()
+                groups.value = conversationRepository.fetchConversationGroups(forceRefresh = forceRefresh)
             } catch (t: Throwable) {
                 errorMessage.value = t.message ?: "加载失败"
                 groups.value = emptyList()

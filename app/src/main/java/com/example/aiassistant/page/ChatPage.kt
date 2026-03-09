@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -88,6 +89,7 @@ fun ChatPage(
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val connectionState by viewModel.connectionState.collectAsState()
 
     val colors = MaterialTheme.colorScheme
 
@@ -105,11 +107,14 @@ fun ChatPage(
     ) {
         CenterAlignedTopAppBar(
             title = {
-                Text(
-                    text = uiState.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = uiState.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    ConnectionStatusChip(connectionState = connectionState)
+                }
             },
             navigationIcon = {
                 IconButton(onClick = onOpenDrawer) {
@@ -152,9 +157,10 @@ fun ChatPage(
             onToggleThinking = viewModel::toggleThinking,
             searchSelected = uiState.mode.searchEnabled,
             onToggleSearch = viewModel::toggleSearch,
-            onMockSend = viewModel::mockSendHello,
+            onSend = viewModel::sendMessage,
             onPickImage = onPickImage,
             onPickFile = onPickFile,
+            isSending = uiState.isSending,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -415,113 +421,96 @@ private fun ChatInputBar(
     onToggleThinking: () -> Unit,
     searchSelected: Boolean,
     onToggleSearch: () -> Unit,
-    onMockSend: () -> Unit,
+    onSend: () -> Unit,
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
+    isSending: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val canSend = inputText.isNotBlank() || isSending
+    var showAttachmentMenu by remember { mutableStateOf(false) }
+
+    ChatInputCard(
+        inputText = inputText,
+        onInputChange = onInputChange,
+        thinkingSelected = thinkingSelected,
+        onToggleThinking = onToggleThinking,
+        searchSelected = searchSelected,
+        onToggleSearch = onToggleSearch,
+        canSend = canSend,
+        showAttachmentMenu = showAttachmentMenu,
+        onShowAttachmentMenu = { showAttachmentMenu = true },
+        onDismissAttachmentMenu = { showAttachmentMenu = false },
+        onPickImage = {
+            showAttachmentMenu = false
+            onPickImage()
+        },
+        onPickFile = {
+            showAttachmentMenu = false
+            onPickFile()
+        },
+        onSend = onSend,
+        isSending = isSending,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun ChatInputCard(
+    inputText: String,
+    onInputChange: (String) -> Unit,
+    thinkingSelected: Boolean,
+    onToggleThinking: () -> Unit,
+    searchSelected: Boolean,
+    onToggleSearch: () -> Unit,
+    canSend: Boolean,
+    showAttachmentMenu: Boolean,
+    onShowAttachmentMenu: () -> Unit,
+    onDismissAttachmentMenu: () -> Unit,
+    onPickImage: () -> Unit,
+    onPickFile: () -> Unit,
+    onSend: () -> Unit,
+    isSending: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    val canSend = inputText.isNotBlank()
-    var showAttachmentMenu by remember { mutableStateOf(false) }
 
     Surface(
-        color = colors.surface,
+        color = colors.surface.copy(alpha = 0.92f),
         shape = RoundedCornerShape(22.dp),
-        shadowElevation = 10.dp,
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        shadowElevation = 6.dp,
         modifier = modifier.navigationBarsPadding(),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box {
-                    OutlinedIconButton(
-                        onClick = { showAttachmentMenu = true },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.outlinedIconButtonColors(
-                            contentColor = colors.onSurface,
-                        ),
-                        border = BorderStroke(1.dp, colors.outlineVariant),
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(imageVector = Icons.Filled.Add, contentDescription = null)
-                    }
-
-                    DropdownMenu(
-                        expanded = showAttachmentMenu,
-                        onDismissRequest = { showAttachmentMenu = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(text = "图片") },
-                            leadingIcon = {
-                                Icon(imageVector = Icons.Filled.ImageIcon, contentDescription = null)
-                            },
-                            onClick = {
-                                showAttachmentMenu = false
-                                onPickImage()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(text = "文件") },
-                            leadingIcon = {
-                                Icon(imageVector = Icons.Filled.AttachFile, contentDescription = null)
-                            },
-                            onClick = {
-                                showAttachmentMenu = false
-                                onPickFile()
-                            },
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                TextField(
-                    value = inputText,
-                    onValueChange = onInputChange,
-                    placeholder = {
-                        Text(
-                            text = "输入消息",
-                            color = colors.onSurfaceVariant,
-                        )
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 40.dp, max = 120.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = colors.surfaceVariant,
-                        unfocusedContainerColor = colors.surfaceVariant,
-                        disabledContainerColor = colors.surfaceVariant,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        focusedTextColor = colors.onSurface,
-                        unfocusedTextColor = colors.onSurface,
-                        focusedPlaceholderColor = colors.onSurfaceVariant,
-                        unfocusedPlaceholderColor = colors.onSurfaceVariant,
-                        cursorColor = colors.primary,
-                    ),
-                )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                FilledIconButton(
-                    onClick = { if (canSend) onMockSend() },
-                    enabled = canSend,
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = colors.primary,
-                        contentColor = colors.onPrimary,
-                        disabledContainerColor = colors.surfaceVariant,
-                        disabledContentColor = colors.onSurfaceVariant,
-                    ),
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                }
-            }
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            TextField(
+                value = inputText,
+                onValueChange = onInputChange,
+                placeholder = {
+                    Text(
+                        text = "发消息或按住说话",
+                        color = colors.onSurfaceVariant,
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp, max = 120.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    focusedTextColor = colors.onSurface,
+                    unfocusedTextColor = colors.onSurface,
+                    focusedPlaceholderColor = colors.onSurfaceVariant,
+                    unfocusedPlaceholderColor = colors.onSurfaceVariant,
+                    cursorColor = colors.primary,
+                ),
+            )
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -549,16 +538,83 @@ private fun ChatInputBar(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedIconButton(
-                        onClick = { /* TODO */ onMockSend() },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.outlinedIconButtonColors(
-                            contentColor = colors.onSurface,
-                        ),
-                        border = BorderStroke(1.dp, colors.outlineVariant),
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(imageVector = Icons.Filled.MicNone, contentDescription = null)
+                    Box {
+                        OutlinedIconButton(
+                            onClick = onShowAttachmentMenu,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.outlinedIconButtonColors(
+                                contentColor = colors.onSurface,
+                            ),
+                            border = BorderStroke(1.dp, colors.outlineVariant),
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                        }
+
+                        DropdownMenu(
+                            expanded = showAttachmentMenu,
+                            onDismissRequest = onDismissAttachmentMenu,
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(text = "图片") },
+                                leadingIcon = {
+                                    Icon(imageVector = Icons.Filled.ImageIcon, contentDescription = null)
+                                },
+                                onClick = onPickImage,
+                            )
+                            DropdownMenuItem(
+                                text = { Text(text = "文件") },
+                                leadingIcon = {
+                                    Icon(imageVector = Icons.Filled.AttachFile, contentDescription = null)
+                                },
+                                onClick = onPickFile,
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    if (isSending) {
+                        FilledIconButton(
+                            onClick = { },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = colors.primary.copy(alpha = 0.7f),
+                                contentColor = colors.onPrimary,
+                            ),
+                            enabled = false,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = colors.onPrimary,
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    } else if (canSend) {
+                        FilledIconButton(
+                            onClick = onSend,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = colors.primary,
+                                contentColor = colors.onPrimary,
+                            ),
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                        }
+                    } else {
+                        OutlinedIconButton(
+                            onClick = { onSend() },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.outlinedIconButtonColors(
+                                contentColor = colors.onSurface,
+                            ),
+                            border = BorderStroke(1.dp, colors.outlineVariant),
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(imageVector = Icons.Filled.MicNone, contentDescription = null)
+                        }
                     }
                 }
             }
@@ -595,6 +651,42 @@ private fun ModeChip(
             text = text,
             color = if (selected) colors.onSurface else colors.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun ConnectionStatusChip(
+    connectionState: com.example.aiassistant.data.model.WebSocketConnectionState,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    
+    val (text, color) = when (connectionState) {
+        com.example.aiassistant.data.model.WebSocketConnectionState.Connected -> "已连接" to colors.primary
+        com.example.aiassistant.data.model.WebSocketConnectionState.Connecting -> "连接中..." to colors.tertiary
+        com.example.aiassistant.data.model.WebSocketConnectionState.Reconnecting -> "重连中..." to colors.tertiary
+        com.example.aiassistant.data.model.WebSocketConnectionState.Disconnected -> "未连接" to colors.error
+    }
+    
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.7f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = text,
+            color = colors.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
         )
     }
 }

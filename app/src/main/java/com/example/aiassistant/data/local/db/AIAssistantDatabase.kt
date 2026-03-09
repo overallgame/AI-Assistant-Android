@@ -8,24 +8,37 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [UserStateEntity::class],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AIAssistantDatabase : RoomDatabase() {
 
     abstract fun userStateDao(): UserStateDao
 
     companion object {
+        private const val DATABASE_NAME = "ai_assistant.db"
+
         @Volatile
         private var INSTANCE: AIAssistantDatabase? = null
 
         fun getInstance(context: Context): AIAssistantDatabase {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    AIAssistantDatabase::class.java,
-                    "ai_assistant.db",
-                ).build().also { INSTANCE = it }
+                INSTANCE ?: buildDatabase(context.applicationContext).also { INSTANCE = it }
             }
+        }
+
+        private fun buildDatabase(context: Context): AIAssistantDatabase {
+            return Room.databaseBuilder(
+                context,
+                AIAssistantDatabase::class.java,
+                DATABASE_NAME,
+            )
+                .fallbackToDestructiveMigration()
+                .build()
+        }
+
+        fun destroyInstance() {
+            INSTANCE?.close()
+            INSTANCE = null
         }
     }
 }
