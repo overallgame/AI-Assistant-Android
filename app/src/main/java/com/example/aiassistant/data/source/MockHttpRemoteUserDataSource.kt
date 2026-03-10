@@ -1,5 +1,7 @@
 package com.example.aiassistant.data.source
 
+import com.example.aiassistant.data.mock.DefaultMockApiHandler
+import com.example.aiassistant.data.mock.DefaultMockWsHandler
 import com.example.aiassistant.data.mock.MockServerManager
 import com.example.aiassistant.data.model.Avatar
 import com.example.aiassistant.data.model.AvatarType
@@ -17,6 +19,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 class MockHttpRemoteUserDataSource(
     private val mockServerManager: MockServerManager,
+    private val mockApiHandler: DefaultMockApiHandler,
+    private val mockWsHandler: DefaultMockWsHandler,
     private val okHttpClient: OkHttpClient,
 ) : RemoteUserDataSource {
 
@@ -26,7 +30,12 @@ class MockHttpRemoteUserDataSource(
     private val baseUrl: String
         get() = mockServerManager.getHttpServerUrl() ?: error("Mock HTTP server not started")
 
+    private fun ensureStarted() {
+        mockServerManager.ensureStarted(mockApiHandler, mockWsHandler)
+    }
+
     override suspend fun loginWithPhone(phoneE164: String): User = withContext(Dispatchers.IO) {
+        ensureStarted()
         val body = """{"phoneE164": "$phoneE164"}""".toRequestBody(jsonMediaType)
         val request = Request.Builder()
             .url("$baseUrl/api/user/login")
@@ -40,6 +49,7 @@ class MockHttpRemoteUserDataSource(
     }
 
     override suspend fun fetchUser(userId: String): User = withContext(Dispatchers.IO) {
+        ensureStarted()
         val request = Request.Builder()
             .url("$baseUrl/api/user/$userId")
             .get()
@@ -52,6 +62,7 @@ class MockHttpRemoteUserDataSource(
     }
 
     override suspend fun updateAvatar(userId: String, avatar: Avatar): User = withContext(Dispatchers.IO) {
+        ensureStarted()
         val body = """{"avatarType": "${avatar.type.name}", "avatarValue": ${avatar.value?.let { "\"$it\"" } ?: "null"}}"""
             .toRequestBody(jsonMediaType)
         val request = Request.Builder()
@@ -66,6 +77,7 @@ class MockHttpRemoteUserDataSource(
     }
 
     override suspend fun updateDisplayName(userId: String, displayName: String?): User = withContext(Dispatchers.IO) {
+        ensureStarted()
         val nameJson = displayName?.let { "\"$it\"" } ?: "null"
         val body = """{"displayName": $nameJson}""".toRequestBody(jsonMediaType)
         val request = Request.Builder()
@@ -81,6 +93,7 @@ class MockHttpRemoteUserDataSource(
 
     override suspend fun updatePreferences(userId: String, preferences: UserPreferences): UserPreferences =
         withContext(Dispatchers.IO) {
+            ensureStarted()
             val body = """{"preferences": true}""".toRequestBody(jsonMediaType)
             val request = Request.Builder()
                 .url("$baseUrl/api/user/$userId/preferences")

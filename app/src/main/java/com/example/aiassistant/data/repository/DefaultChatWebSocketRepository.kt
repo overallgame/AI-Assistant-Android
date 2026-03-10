@@ -1,5 +1,9 @@
 package com.example.aiassistant.data.repository
 
+import com.example.aiassistant.config.AppConfig
+import com.example.aiassistant.data.mock.DefaultMockApiHandler
+import com.example.aiassistant.data.mock.DefaultMockWsHandler
+import com.example.aiassistant.data.mock.MockServerManager
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.WebSocketConnectionState
 import com.example.aiassistant.data.websocket.ChatWebSocketManager
@@ -12,6 +16,10 @@ import javax.inject.Singleton
 @Singleton
 class DefaultChatWebSocketRepository @Inject constructor(
     private val webSocketManager: ChatWebSocketManager,
+    private val mockServerManager: MockServerManager,
+    private val defaultMockApiHandler: DefaultMockApiHandler,
+    private val defaultMockWsHandler: DefaultMockWsHandler,
+    private val appConfig: AppConfig,
 ) : ChatWebSocketRepository {
 
     override val connectionState: StateFlow<WebSocketConnectionState>
@@ -21,6 +29,13 @@ class DefaultChatWebSocketRepository @Inject constructor(
         get() = webSocketManager.events
 
     override fun connect() {
+        if (appConfig.useMockBackend) {
+            // Ensure mock server is started before connecting
+            mockServerManager.ensureStarted(defaultMockApiHandler, defaultMockWsHandler)
+            mockServerManager.wsServerUrl.value?.let { url ->
+                webSocketManager.setServerUrl(url)
+            }
+        }
         webSocketManager.connect()
     }
 

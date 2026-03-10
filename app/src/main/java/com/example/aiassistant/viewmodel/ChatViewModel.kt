@@ -52,7 +52,7 @@ class ChatViewModel @Inject constructor(
             webSocketRepository.events.collect { event ->
                 when (event) {
                     is WebSocketEvent.MessageReceived -> {
-                        addAssistantMessage(event.message)
+                        // 流式结束消息，不需要再添加（已在chunk中处理）
                     }
                     is WebSocketEvent.Error -> {
                         _uiState.update { it.copy(errorMessage = event.message, isSending = false) }
@@ -61,8 +61,12 @@ class ChatViewModel @Inject constructor(
                         _uiState.update { it.copy(errorMessage = null) }
                     }
                     is WebSocketEvent.Disconnected -> {}
-                    is WebSocketEvent.ChunkReceived -> {}
-                    is WebSocketEvent.DoneReceived -> {}
+                    is WebSocketEvent.ChunkReceived -> {
+                        updateStreamingMessage(event.messageId, event.content)
+                    }
+                    is WebSocketEvent.DoneReceived -> {
+                        finishStreamingMessage(event.messageId)
+                    }
                 }
             }
         }
@@ -256,6 +260,58 @@ class ChatViewModel @Inject constructor(
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
             newMessages.add(message)
+            state.copy(
+                messages = newMessages,
+                isSending = false,
+            )
+        }
+    }
+
+    // 处理流式接收的文本块
+    private fun updateStreamingMessage(messageId: String, content: String) {
+        _uiState.update { state ->
+            val idx = state.messages.indexOfFirst { it.id == messageId }
+            val newMessages = state.messages.toMutableList()
+
+            if (idx >= 0) {
+                // 更新现有消息
+                val existingMsg = newMessages[idx]
+                val newParts = existingMsg.parts.map { part ->
+                    if (part is ChatMessagePart.Text) {
+                        part.copy(text = content)
+                    } else {
+                        part
+                    }
+                }
+                newMessages[idx] = existingMsg.copy(parts = newParts, isStreaming = true)
+            } else {
+                // 新建消息（首次接收）
+                val newMessage = ChatMessage(
+                    id = messageId,
+                    role = ChatRole.Assistant,
+                    parts = listOf(ChatMessagePart.Text(content)),
+                    isStreaming = true,
+                )
+                newMessages.add(newMessage)
+            }
+
+            state.copy(
+                messages = newMessages,
+                isSending = false,
+            )
+        }
+    }
+
+    // 流式输出完成
+    private fun finishStreamingMessage(messageId: String) {
+        _uiState.update { state ->
+            val idx = state.messages.indexOfFirst { it.id == messageId }
+            if (idx < 0) return@update state
+
+            val newMessages = state.messages.toMutableList()
+            val existingMsg = newMessages[idx]
+            newMessages[idx] = existingMsg.copy(isStreaming = false)
+
             state.copy(
                 messages = newMessages,
                 isSending = false,

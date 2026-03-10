@@ -2,4 +2,12 @@
 <resources>
 
     <style name="Theme.AIAssistant" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Splash Screen Theme - Uses system splash screen API -->
+    <style name="Theme.AIAssistant.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <item name="postSplashScreenTheme">@style/Theme.AIAssistant</item>
+    </style>
 </resources>

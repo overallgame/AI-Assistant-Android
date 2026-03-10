@@ -68,6 +68,9 @@ fun AppRoot(modifier: Modifier = Modifier) {
         Screen.FontSize.route,
     )
 
+    // 在 ChatPage 上启用滑动手势打开 drawer，在其他页面禁用
+    val gesturesEnabled = currentRoute == Screen.Chat.route
+
     val navContent: @Composable () -> Unit = {
         AppNavGraph(
             navController = navController,
@@ -92,6 +95,7 @@ fun AppRoot(modifier: Modifier = Modifier) {
                     },
                 )
             },
+            gesturesEnabled = gesturesEnabled,
             modifier = modifier,
         ) {
             navContent()

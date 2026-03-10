@@ -27,6 +27,9 @@ class MockServerManager @Inject constructor() {
     private var httpServer: MockWebServer? = null
     private var wsServer: MockWebServer? = null
 
+    private var mockApiHandler: MockApiHandler? = null
+    private var mockWsHandler: MockWsHandler? = null
+
     private val _httpServerUrl = MutableStateFlow<String?>(null)
     val httpServerUrl: StateFlow<String?> = _httpServerUrl.asStateFlow()
 
@@ -66,6 +69,11 @@ class MockServerManager @Inject constructor() {
             startWsServer(mockWsHandler)
             _isStarted.value = true
         }
+    }
+
+    fun ensureStarted(mockApiHandler: MockApiHandler, mockWsHandler: MockWsHandler) {
+        if (_isStarted.value) return
+        startAll(mockApiHandler, mockWsHandler)
     }
 
     fun stopAll() {

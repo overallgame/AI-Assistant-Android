@@ -2,6 +2,7 @@ package com.example.aiassistant.page
 
 import android.net.Uri
 import android.util.Size
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -251,8 +252,9 @@ private fun ChatMessageItem(
                     when (part) {
                         is ChatMessagePart.Text -> {
                             if (part.text.isNotBlank()) {
-                                Text(
+                                StreamingText(
                                     text = part.text,
+                                    isStreaming = message.isStreaming,
                                     color = colors.onSurface,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
@@ -260,6 +262,7 @@ private fun ChatMessageItem(
                         }
 
                         is ChatMessagePart.Image -> {
+                            // ... existing code ...
                             val thumbBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = part.contentUri) {
                                 value = try {
                                     contentResolver.loadThumbnail(Uri.parse(part.contentUri), Size(420, 420), null)
@@ -652,6 +655,41 @@ private fun ModeChip(
             color = if (selected) colors.onSurface else colors.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+@Composable
+private fun StreamingText(
+    text: String,
+    isStreaming: Boolean,
+    color: Color,
+    style: androidx.compose.ui.text.TextStyle,
+    modifier: Modifier = Modifier,
+) {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "cursor")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.4f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(durationMillis = 500),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "cursorAlpha"
+    )
+
+    Row(modifier = modifier) {
+        Text(
+            text = text,
+            color = color,
+            style = style,
+        )
+        if (isStreaming) {
+            Text(
+                text = "▋",
+                color = color.copy(alpha = alpha),
+                style = style,
+            )
+        }
     }
 }
 

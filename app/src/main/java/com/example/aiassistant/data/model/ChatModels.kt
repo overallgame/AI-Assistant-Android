@@ -59,6 +59,7 @@ data class ChatMessage(
     val parts: List<ChatMessagePart>,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val status: MessageSendStatus = MessageSendStatus.Sent,
+    val isStreaming: Boolean = false, // 是否正在流式输出中
 )
 
 data class ChatMode(

@@ -108,11 +108,15 @@ object AppModule {
     fun provideRemoteUserDataSource(
         appConfig: AppConfig,
         mockServerManager: MockServerManager,
+        defaultMockApiHandler: DefaultMockApiHandler,
+        defaultMockWsHandler: DefaultMockWsHandler,
         okHttpClient: OkHttpClient,
     ): RemoteUserDataSource {
         return if (appConfig.useMockBackend) {
             MockHttpRemoteUserDataSource(
                 mockServerManager = mockServerManager,
+                mockApiHandler = defaultMockApiHandler,
+                mockWsHandler = defaultMockWsHandler,
                 okHttpClient = okHttpClient,
             )
         } else {
@@ -125,11 +129,15 @@ object AppModule {
     fun provideRemoteConversationDataSource(
         appConfig: AppConfig,
         mockServerManager: MockServerManager,
+        defaultMockApiHandler: DefaultMockApiHandler,
+        defaultMockWsHandler: DefaultMockWsHandler,
         okHttpClient: OkHttpClient,
     ): RemoteConversationDataSource {
         return if (appConfig.useMockBackend) {
             MockHttpRemoteConversationDataSource(
                 mockServerManager = mockServerManager,
+                mockApiHandler = defaultMockApiHandler,
+                mockWsHandler = defaultMockWsHandler,
                 okHttpClient = okHttpClient,
             )
         } else {
@@ -161,7 +169,17 @@ object AppModule {
     @Singleton
     fun provideChatWebSocketRepository(
         webSocketManager: ChatWebSocketManager,
+        mockServerManager: com.example.aiassistant.data.mock.MockServerManager,
+        defaultMockApiHandler: com.example.aiassistant.data.mock.DefaultMockApiHandler,
+        defaultMockWsHandler: com.example.aiassistant.data.mock.DefaultMockWsHandler,
+        appConfig: com.example.aiassistant.config.AppConfig,
     ): ChatWebSocketRepository {
-        return DefaultChatWebSocketRepository(webSocketManager = webSocketManager)
+        return DefaultChatWebSocketRepository(
+            webSocketManager = webSocketManager,
+            mockServerManager = mockServerManager,
+            defaultMockApiHandler = defaultMockApiHandler,
+            defaultMockWsHandler = defaultMockWsHandler,
+            appConfig = appConfig,
+        )
     }
 }

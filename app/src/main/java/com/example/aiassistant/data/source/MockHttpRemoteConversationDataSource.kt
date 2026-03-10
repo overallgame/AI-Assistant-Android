@@ -1,5 +1,7 @@
 package com.example.aiassistant.data.source
 
+import com.example.aiassistant.data.mock.DefaultMockApiHandler
+import com.example.aiassistant.data.mock.DefaultMockWsHandler
 import com.example.aiassistant.data.mock.MockServerManager
 import com.example.aiassistant.data.model.ConversationGroup
 import com.example.aiassistant.data.model.ConversationSummary
@@ -16,6 +18,8 @@ import okhttp3.Request
 
 class MockHttpRemoteConversationDataSource(
     private val mockServerManager: MockServerManager,
+    private val mockApiHandler: DefaultMockApiHandler,
+    private val mockWsHandler: DefaultMockWsHandler,
     private val okHttpClient: OkHttpClient,
 ) : RemoteConversationDataSource {
 
@@ -24,7 +28,12 @@ class MockHttpRemoteConversationDataSource(
     private val baseUrl: String
         get() = mockServerManager.getHttpServerUrl() ?: error("Mock HTTP server not started")
 
+    private fun ensureStarted() {
+        mockServerManager.ensureStarted(mockApiHandler, mockWsHandler)
+    }
+
     override suspend fun fetchConversationGroups(): List<ConversationGroup> = withContext(Dispatchers.IO) {
+        ensureStarted()
         val request = Request.Builder()
             .url("$baseUrl/api/conversations")
             .get()
