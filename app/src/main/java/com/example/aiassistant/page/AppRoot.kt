@@ -30,36 +30,8 @@ fun AppRoot(modifier: Modifier = Modifier) {
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val chatViewModel: ChatViewModel = hiltViewModel()
 
-    val userState by settingsViewModel.userState.collectAsState()
-    val isLoggedIn = userState.session.isLoggedIn
-
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
-
-    LaunchedEffect(isLoggedIn) {
-        if (isLoggedIn && currentRoute in listOf(
-                Screen.LoginEntry.route,
-                Screen.PhoneCodeLogin.route,
-                Screen.PasswordLogin.route,
-            )
-        ) {
-            navController.navigate(Screen.Chat.route) {
-                popUpTo(Screen.LoginEntry.route) { inclusive = true }
-            }
-        }
-
-        if (!isLoggedIn && currentRoute in listOf(
-                Screen.Chat.route,
-                Screen.Settings.route,
-                Screen.AccountManagement.route,
-                Screen.FontSize.route,
-            )
-        ) {
-            navController.navigate(Screen.LoginEntry.route) {
-                popUpTo(0) { inclusive = true }
-            }
-        }
-    }
 
     val showDrawer = currentRoute in listOf(
         Screen.Chat.route,

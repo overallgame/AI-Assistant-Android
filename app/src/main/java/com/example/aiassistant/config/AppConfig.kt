@@ -55,12 +55,17 @@ class AppConfig @Inject constructor(
     var debugLogging: Boolean
         get() = prefs.getBoolean(KEY_DEBUG_LOGGING, true)
         set(value) = prefs.edit().putBoolean(KEY_DEBUG_LOGGING, value).apply()
-    
+
+    var forceLocalAuth: Boolean
+        get() = prefs.getBoolean(KEY_FORCE_LOCAL_AUTH, false)
+        set(value) = prefs.edit().putBoolean(KEY_FORCE_LOCAL_AUTH, value).apply()
+
     companion object {
         private const val PREFS_NAME = "ai_assistant_config"
         private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_USE_MOCK_BACKEND = "use_mock_backend"
         private const val KEY_DEBUG_LOGGING = "debug_logging"
+        private const val KEY_FORCE_LOCAL_AUTH = "force_local_auth"
 
         // 星火配置键
         private const val KEY_XINGHUO_APP_ID = "xinghuo_app_id"

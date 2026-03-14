@@ -3,6 +3,7 @@ package com.example.aiassistant.di
 import android.content.Context
 import android.util.Log
 import com.example.aiassistant.config.AppConfig
+import com.example.aiassistant.data.model.AuthMode
 import com.example.aiassistant.data.local.AIAssistantDatabase
 import com.example.aiassistant.data.mock.DefaultMockApiHandler
 import com.example.aiassistant.data.mock.DefaultMockWsHandler
@@ -89,18 +90,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideLocalUserDataSource(
-        database: AIAssistantDatabase,
-        applicationScope: CoroutineScope,
-    ): LocalUserDataSource {
-        return RoomLocalUserDataSource(
-            dao = database.userStateDao(),
-            scope = applicationScope,
-        )
-    }
-
-    @Provides
-    @Singleton
     fun provideMockServerManager(): MockServerManager {
         return MockServerManager()
     }
@@ -115,6 +104,18 @@ object AppModule {
     @Singleton
     fun provideDefaultMockWsHandler(): DefaultMockWsHandler {
         return DefaultMockWsHandler()
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocalUserDataSource(
+        database: AIAssistantDatabase,
+        applicationScope: CoroutineScope,
+    ): LocalUserDataSource {
+        return RoomLocalUserDataSource(
+            dao = database.userStateDao(),
+            scope = applicationScope,
+        )
     }
 
     @Provides
@@ -161,13 +162,25 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideAuthMode(appConfig: AppConfig): AuthMode {
+        return when {
+            appConfig.forceLocalAuth -> AuthMode.LOCAL_ONLY
+            appConfig.useMockBackend -> AuthMode.LOCAL_THEN_REMOTE
+            else -> AuthMode.REMOTE_ONLY
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideUserRepository(
         localUserDataSource: LocalUserDataSource,
         remoteUserDataSource: RemoteUserDataSource,
+        authMode: AuthMode,
     ): UserRepository {
         return DefaultUserRepository(
             local = localUserDataSource,
             remote = remoteUserDataSource,
+            authMode = authMode,
         )
     }
 

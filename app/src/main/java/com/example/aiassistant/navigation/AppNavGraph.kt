@@ -8,7 +8,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,9 +60,29 @@ fun AppNavGraph(
     modifier: Modifier = Modifier,
     onOpenDrawer: (() -> Unit)? = null,
 ) {
+    val userState by settingsViewModel.userState.collectAsState()
+    val isLoggedIn = userState.session.isLoggedIn
+
+    // 根据登录状态决定起始页面
+    val startDestination = if (isLoggedIn) Screen.Chat.route else Screen.LoginEntry.route
+
+    // 监听登录状态变化，自动导航
+    LaunchedEffect(isLoggedIn) {
+        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        if (isLoggedIn && currentRoute in authScreens) {
+            navController.navigate(Screen.Chat.route) {
+                popUpTo(Screen.LoginEntry.route) { inclusive = true }
+            }
+        } else if (!isLoggedIn && currentRoute in mainScreens) {
+            navController.navigate(Screen.LoginEntry.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
-        startDestination = Screen.LoginEntry.route,
+        startDestination = startDestination,
         modifier = modifier,
     ) {
         composable(
