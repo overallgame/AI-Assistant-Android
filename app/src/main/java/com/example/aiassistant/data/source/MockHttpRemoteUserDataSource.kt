@@ -7,6 +7,7 @@ import com.example.aiassistant.data.model.Avatar
 import com.example.aiassistant.data.model.AvatarType
 import com.example.aiassistant.data.model.User
 import com.example.aiassistant.data.model.UserPreferences
+import com.example.aiassistant.data.source.interfac.RemoteUserDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json

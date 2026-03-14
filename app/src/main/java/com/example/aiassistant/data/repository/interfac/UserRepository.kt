@@ -1,4 +1,4 @@
-package com.example.aiassistant.data.repository
+package com.example.aiassistant.data.repository.interfac
 
 import com.example.aiassistant.data.model.AppearancePreference
 import com.example.aiassistant.data.model.Avatar

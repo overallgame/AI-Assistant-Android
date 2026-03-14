@@ -7,8 +7,9 @@ import com.example.aiassistant.data.model.LanguagePreference
 import com.example.aiassistant.data.model.User
 import com.example.aiassistant.data.model.UserPreferences
 import com.example.aiassistant.data.model.UserState
-import com.example.aiassistant.data.source.LocalUserDataSource
-import com.example.aiassistant.data.source.RemoteUserDataSource
+import com.example.aiassistant.data.repository.interfac.UserRepository
+import com.example.aiassistant.data.source.interfac.LocalUserDataSource
+import com.example.aiassistant.data.source.interfac.RemoteUserDataSource
 import kotlinx.coroutines.flow.StateFlow
 
 class DefaultUserRepository(

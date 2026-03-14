@@ -31,6 +31,7 @@ enum class ChatFileType {
 sealed interface ChatMessagePart {
     data class Text(
         val text: String,
+        val reasoning: String = "", // 推理内容（星火深度思考）
     ) : ChatMessagePart
 
     data class Image(

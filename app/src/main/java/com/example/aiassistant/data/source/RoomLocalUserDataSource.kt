@@ -1,13 +1,14 @@
 package com.example.aiassistant.data.source
 
-import com.example.aiassistant.data.local.db.UserStateDao
-import com.example.aiassistant.data.local.db.toEntity
-import com.example.aiassistant.data.local.db.toModel
+import com.example.aiassistant.data.local.UserStateDao
+import com.example.aiassistant.data.local.toEntity
+import com.example.aiassistant.data.local.toModel
 import com.example.aiassistant.data.model.Avatar
 import com.example.aiassistant.data.model.Session
 import com.example.aiassistant.data.model.User
 import com.example.aiassistant.data.model.UserPreferences
 import com.example.aiassistant.data.model.UserState
+import com.example.aiassistant.data.source.interfac.LocalUserDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted

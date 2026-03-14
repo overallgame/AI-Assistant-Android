@@ -66,6 +66,7 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
 
     implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
     implementation(libs.okhttp.mockwebserver)
 
     implementation(libs.kotlinx.serialization.json)

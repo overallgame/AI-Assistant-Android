@@ -5,8 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.aiassistant.data.model.ConversationDrawerUiState
 import com.example.aiassistant.data.model.ConversationGroup
 import com.example.aiassistant.data.model.DrawerUserInfo
-import com.example.aiassistant.data.repository.ConversationRepository
-import com.example.aiassistant.data.repository.UserRepository
+import com.example.aiassistant.data.repository.interfac.ConversationRepository
+import com.example.aiassistant.data.repository.interfac.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow

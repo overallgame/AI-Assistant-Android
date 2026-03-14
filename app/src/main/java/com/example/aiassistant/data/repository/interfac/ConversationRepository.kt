@@ -1,7 +1,6 @@
-package com.example.aiassistant.data.repository
+package com.example.aiassistant.data.repository.interfac
 
 import com.example.aiassistant.data.model.ConversationGroup
-import com.example.aiassistant.data.source.RemoteConversationDataSource
 
 interface ConversationRepository {
     suspend fun fetchConversationGroups(forceRefresh: Boolean = false): List<ConversationGroup>

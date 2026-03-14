@@ -10,7 +10,7 @@ import com.example.aiassistant.data.model.ChatUiState
 import com.example.aiassistant.data.model.ChatFileType
 import com.example.aiassistant.data.model.AttachmentTransferStatus
 import com.example.aiassistant.data.model.WebSocketConnectionState
-import com.example.aiassistant.data.repository.ChatWebSocketRepository
+import com.example.aiassistant.data.repository.interfac.ChatWebSocketRepository
 import com.example.aiassistant.data.websocket.WebSocketEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -27,7 +27,7 @@ import kotlin.random.Random
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val webSocketRepository: ChatWebSocketRepository,
-    private val appConfig: AppConfig,
+    appConfig: AppConfig,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -39,7 +39,6 @@ class ChatViewModel @Inject constructor(
     private val attachmentJobs = mutableMapOf<String, Job>()
 
     init {
-        webSocketRepository.setServerUrl(appConfig.webSocketUrl)
         observeWebSocketEvents()
 
         if (appConfig.autoConnect) {
@@ -67,22 +66,38 @@ class ChatViewModel @Inject constructor(
                     is WebSocketEvent.DoneReceived -> {
                         finishStreamingMessage(event.messageId)
                     }
+                    // 星火大模型事件
+                    is WebSocketEvent.XinghuoReasoningChunkReceived -> {
+                        // 处理推理内容流式输出
+                        updateStreamingReasoning(event.messageId, event.reasoning)
+                    }
+                    is WebSocketEvent.XinghuoContentChunkReceived -> {
+                        // 处理内容流式输出
+                        updateStreamingMessage(event.messageId, event.content)
+                    }
+                    is WebSocketEvent.XinghuoDoneReceived -> {
+                        // 流式结束
+                        finishStreamingMessage(event.messageId)
+                    }
+                    is WebSocketEvent.XinghuoError -> {
+                        _uiState.update {
+                            it.copy(
+                                errorMessage = "星火错误[${event.code}]: ${event.message}",
+                                isSending = false
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    fun connect() {
+    private fun connect() {
         webSocketRepository.connect()
     }
 
-    fun disconnect() {
+    private fun disconnect() {
         webSocketRepository.disconnect()
-    }
-
-    fun setServerUrl(url: String) {
-        appConfig.webSocketUrl = url
-        webSocketRepository.setServerUrl(url)
     }
 
     fun newChat() {
@@ -106,18 +121,18 @@ class ChatViewModel @Inject constructor(
     fun sendMessage() {
         val currentState = _uiState.value
         val content = currentState.inputText.trim()
-        
+
         if (content.isBlank() && currentState.messages.isEmpty()) {
             return
         }
-        
+
         val userMessageId = UUID.randomUUID().toString()
         val userMessage = ChatMessage(
             id = userMessageId,
             role = ChatRole.User,
             parts = if (content.isNotBlank()) listOf(ChatMessagePart.Text(content)) else emptyList(),
         )
-        
+
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
             newMessages.add(userMessage)
@@ -127,38 +142,48 @@ class ChatViewModel @Inject constructor(
                 isSending = true,
             )
         }
-        
+
         val messageId = UUID.randomUUID().toString()
-        
+
+        // 构建对话历史（用于多轮对话）
+        val history = currentState.messages.mapNotNull { msg ->
+            val textParts = msg.parts.filterIsInstance<ChatMessagePart.Text>()
+            if (textParts.isEmpty()) return@mapNotNull null
+            
+            val msgContent = textParts.joinToString("") { it.text }
+            val role = when (msg.role) {
+                ChatRole.User -> "user"
+                ChatRole.Assistant -> "assistant"
+            }
+            role to msgContent
+        }
+
         if (connectionState.value == WebSocketConnectionState.Connected) {
             webSocketRepository.sendMessage(
                 content = content,
                 messageId = messageId,
-                thinkingEnabled = currentState.mode.thinkingEnabled,
-                searchEnabled = currentState.mode.searchEnabled,
-                attachments = emptyList(),
+                conversationHistory = history,
             )
         } else {
             viewModelScope.launch {
                 webSocketRepository.connect()
-                delay(2000)
+                // 等待连接成功或超时
+                var waited = 0
+                while (connectionState.value != WebSocketConnectionState.Connected && waited < 10000) {
+                    delay(100)
+                    waited += 100
+                }
                 if (connectionState.value == WebSocketConnectionState.Connected) {
                     webSocketRepository.sendMessage(
                         content = content,
                         messageId = messageId,
-                        thinkingEnabled = currentState.mode.thinkingEnabled,
-                        searchEnabled = currentState.mode.searchEnabled,
-                        attachments = emptyList(),
+                        conversationHistory = history,
                     )
                 } else {
                     _uiState.update { it.copy(errorMessage = "无法连接到服务器", isSending = false) }
                 }
             }
         }
-    }
-    
-    fun mockSendHello() {
-        sendMessage()
     }
 
     fun sendImage(
@@ -268,17 +293,18 @@ class ChatViewModel @Inject constructor(
     }
 
     // 处理流式接收的文本块
-    private fun updateStreamingMessage(messageId: String, content: String) {
+    private fun updateStreamingMessage(messageId: String, newContent: String) {
         _uiState.update { state ->
             val idx = state.messages.indexOfFirst { it.id == messageId }
             val newMessages = state.messages.toMutableList()
 
             if (idx >= 0) {
-                // 更新现有消息
+                // 更新现有消息 - 追加新内容
                 val existingMsg = newMessages[idx]
                 val newParts = existingMsg.parts.map { part ->
                     if (part is ChatMessagePart.Text) {
-                        part.copy(text = content)
+                        // 追加新内容到现有文本
+                        part.copy(text = part.text + newContent)
                     } else {
                         part
                     }
@@ -289,7 +315,42 @@ class ChatViewModel @Inject constructor(
                 val newMessage = ChatMessage(
                     id = messageId,
                     role = ChatRole.Assistant,
-                    parts = listOf(ChatMessagePart.Text(content)),
+                    parts = listOf(ChatMessagePart.Text(newContent)),
+                    isStreaming = true,
+                )
+                newMessages.add(newMessage)
+            }
+
+            state.copy(
+                messages = newMessages,
+                isSending = false,
+            )
+        }
+    }
+
+    // 处理流式接收的推理内容
+    private fun updateStreamingReasoning(messageId: String, newReasoning: String) {
+        _uiState.update { state ->
+            val idx = state.messages.indexOfFirst { it.id == messageId }
+            val newMessages = state.messages.toMutableList()
+
+            if (idx >= 0) {
+                val existingMsg = newMessages[idx]
+                val newParts = existingMsg.parts.map { part ->
+                    if (part is ChatMessagePart.Text) {
+                        // 追加新推理内容到现有推理
+                        part.copy(reasoning = part.reasoning + newReasoning)
+                    } else {
+                        part
+                    }
+                }
+                newMessages[idx] = existingMsg.copy(parts = newParts, isStreaming = true)
+            } else {
+                // 如果消息还不存在，先创建
+                val newMessage = ChatMessage(
+                    id = messageId,
+                    role = ChatRole.Assistant,
+                    parts = listOf(ChatMessagePart.Text("", newReasoning)),
                     isStreaming = true,
                 )
                 newMessages.add(newMessage)

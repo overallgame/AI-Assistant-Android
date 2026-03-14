@@ -5,11 +5,10 @@ import com.example.aiassistant.data.mock.DefaultMockWsHandler
 import com.example.aiassistant.data.mock.MockServerManager
 import com.example.aiassistant.data.model.ConversationGroup
 import com.example.aiassistant.data.model.ConversationSummary
+import com.example.aiassistant.data.source.interfac.RemoteConversationDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive

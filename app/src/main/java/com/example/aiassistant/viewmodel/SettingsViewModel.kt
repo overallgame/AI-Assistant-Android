@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.aiassistant.data.model.AppearancePreference
 import com.example.aiassistant.data.model.Avatar
 import com.example.aiassistant.data.model.UserState
-import com.example.aiassistant.data.repository.UserRepository
+import com.example.aiassistant.data.repository.interfac.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch

@@ -2,7 +2,7 @@ package com.example.aiassistant.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.aiassistant.data.repository.UserRepository
+import com.example.aiassistant.data.repository.interfac.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

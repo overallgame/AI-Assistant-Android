@@ -1,4 +1,4 @@
-package com.example.aiassistant.data.local.db
+package com.example.aiassistant.data.local
 
 import androidx.room.Dao
 import androidx.room.Insert

@@ -2,7 +2,6 @@ package com.example.aiassistant.startup
 
 import android.content.Context
 import androidx.startup.Initializer
-import dagger.hilt.android.qualifiers.ApplicationContext
 
 class AppStartupInitializer : Initializer<Unit> {
 

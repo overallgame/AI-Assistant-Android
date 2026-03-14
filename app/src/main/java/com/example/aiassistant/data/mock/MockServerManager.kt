@@ -73,7 +73,10 @@ class MockServerManager @Inject constructor() {
 
     fun ensureStarted(mockApiHandler: MockApiHandler, mockWsHandler: MockWsHandler) {
         if (_isStarted.value) return
-        startAll(mockApiHandler, mockWsHandler)
+        // 同步启动服务器并等待完成
+        startHttpServer(mockApiHandler)
+        startWsServer(mockWsHandler)
+        _isStarted.value = true
     }
 
     fun stopAll() {

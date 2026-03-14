@@ -1,24 +1,25 @@
 package com.example.aiassistant.di
 
 import android.content.Context
+import android.util.Log
 import com.example.aiassistant.config.AppConfig
-import com.example.aiassistant.data.local.db.AIAssistantDatabase
+import com.example.aiassistant.data.local.AIAssistantDatabase
 import com.example.aiassistant.data.mock.DefaultMockApiHandler
 import com.example.aiassistant.data.mock.DefaultMockWsHandler
 import com.example.aiassistant.data.mock.MockServerManager
-import com.example.aiassistant.data.repository.ChatWebSocketRepository
-import com.example.aiassistant.data.repository.ConversationRepository
+import com.example.aiassistant.data.repository.interfac.ChatWebSocketRepository
+import com.example.aiassistant.data.repository.interfac.ConversationRepository
 import com.example.aiassistant.data.repository.DefaultChatWebSocketRepository
 import com.example.aiassistant.data.repository.DefaultConversationRepository
 import com.example.aiassistant.data.repository.DefaultUserRepository
-import com.example.aiassistant.data.repository.UserRepository
+import com.example.aiassistant.data.repository.interfac.UserRepository
 import com.example.aiassistant.data.source.FakeRemoteConversationDataSource
 import com.example.aiassistant.data.source.FakeRemoteUserDataSource
-import com.example.aiassistant.data.source.LocalUserDataSource
+import com.example.aiassistant.data.source.interfac.LocalUserDataSource
 import com.example.aiassistant.data.source.MockHttpRemoteConversationDataSource
 import com.example.aiassistant.data.source.MockHttpRemoteUserDataSource
-import com.example.aiassistant.data.source.RemoteConversationDataSource
-import com.example.aiassistant.data.source.RemoteUserDataSource
+import com.example.aiassistant.data.source.interfac.RemoteConversationDataSource
+import com.example.aiassistant.data.source.interfac.RemoteUserDataSource
 import com.example.aiassistant.data.source.RoomLocalUserDataSource
 import com.example.aiassistant.data.websocket.ChatWebSocketManager
 import dagger.Module
@@ -30,6 +31,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -39,21 +41,33 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder()
+    fun provideOkHttpClient(appConfig: AppConfig): OkHttpClient {
+        val builder = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .pingInterval(30, TimeUnit.SECONDS)
-            .build()
+
+        // 仅在调试模式下启用日志
+        if (appConfig.debugLogging) {
+            val loggingInterceptor = HttpLoggingInterceptor { message ->
+                Log.d("OkHttp", message)
+            }.apply {
+                level = HttpLoggingInterceptor.Level.BODY
+            }
+            builder.addInterceptor(loggingInterceptor)
+        }
+
+        return builder.build()
     }
 
     @Provides
     @Singleton
     fun provideChatWebSocketManager(
         okHttpClient: OkHttpClient,
+        appConfig: AppConfig,
     ): ChatWebSocketManager {
-        return ChatWebSocketManager(okHttpClient)
+        return ChatWebSocketManager(okHttpClient, appConfig)
     }
 }
 
@@ -169,17 +183,7 @@ object AppModule {
     @Singleton
     fun provideChatWebSocketRepository(
         webSocketManager: ChatWebSocketManager,
-        mockServerManager: com.example.aiassistant.data.mock.MockServerManager,
-        defaultMockApiHandler: com.example.aiassistant.data.mock.DefaultMockApiHandler,
-        defaultMockWsHandler: com.example.aiassistant.data.mock.DefaultMockWsHandler,
-        appConfig: com.example.aiassistant.config.AppConfig,
     ): ChatWebSocketRepository {
-        return DefaultChatWebSocketRepository(
-            webSocketManager = webSocketManager,
-            mockServerManager = mockServerManager,
-            defaultMockApiHandler = defaultMockApiHandler,
-            defaultMockWsHandler = defaultMockWsHandler,
-            appConfig = appConfig,
-        )
+        return DefaultChatWebSocketRepository(webSocketManager)
     }
 }

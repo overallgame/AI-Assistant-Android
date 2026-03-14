@@ -2,6 +2,7 @@ package com.example.aiassistant.data.source
 
 import com.example.aiassistant.data.model.ConversationGroup
 import com.example.aiassistant.data.model.ConversationSummary
+import com.example.aiassistant.data.source.interfac.RemoteConversationDataSource
 import kotlinx.coroutines.delay
 
 class FakeRemoteConversationDataSource : RemoteConversationDataSource {

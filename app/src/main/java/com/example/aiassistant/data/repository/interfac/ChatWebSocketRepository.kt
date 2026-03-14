@@ -1,4 +1,4 @@
-package com.example.aiassistant.data.repository
+package com.example.aiassistant.data.repository.interfac
 
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.WebSocketConnectionState
@@ -18,6 +18,7 @@ interface ChatWebSocketRepository {
         thinkingEnabled: Boolean = false,
         searchEnabled: Boolean = false,
         attachments: List<ChatMessagePart> = emptyList(),
+        conversationHistory: List<Pair<String, String>> = emptyList(),
     )
 
     fun setServerUrl(url: String)

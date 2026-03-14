@@ -1,7 +1,8 @@
 package com.example.aiassistant.data.repository
 
 import com.example.aiassistant.data.model.ConversationGroup
-import com.example.aiassistant.data.source.RemoteConversationDataSource
+import com.example.aiassistant.data.repository.interfac.ConversationRepository
+import com.example.aiassistant.data.source.interfac.RemoteConversationDataSource
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 

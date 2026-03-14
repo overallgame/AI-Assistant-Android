@@ -1,11 +1,8 @@
 package com.example.aiassistant.data.repository
 
-import com.example.aiassistant.config.AppConfig
-import com.example.aiassistant.data.mock.DefaultMockApiHandler
-import com.example.aiassistant.data.mock.DefaultMockWsHandler
-import com.example.aiassistant.data.mock.MockServerManager
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.WebSocketConnectionState
+import com.example.aiassistant.data.repository.interfac.ChatWebSocketRepository
 import com.example.aiassistant.data.websocket.ChatWebSocketManager
 import com.example.aiassistant.data.websocket.WebSocketEvent
 import kotlinx.coroutines.flow.SharedFlow
@@ -16,10 +13,6 @@ import javax.inject.Singleton
 @Singleton
 class DefaultChatWebSocketRepository @Inject constructor(
     private val webSocketManager: ChatWebSocketManager,
-    private val mockServerManager: MockServerManager,
-    private val defaultMockApiHandler: DefaultMockApiHandler,
-    private val defaultMockWsHandler: DefaultMockWsHandler,
-    private val appConfig: AppConfig,
 ) : ChatWebSocketRepository {
 
     override val connectionState: StateFlow<WebSocketConnectionState>
@@ -29,13 +22,6 @@ class DefaultChatWebSocketRepository @Inject constructor(
         get() = webSocketManager.events
 
     override fun connect() {
-        if (appConfig.useMockBackend) {
-            // Ensure mock server is started before connecting
-            mockServerManager.ensureStarted(defaultMockApiHandler, defaultMockWsHandler)
-            mockServerManager.wsServerUrl.value?.let { url ->
-                webSocketManager.setServerUrl(url)
-            }
-        }
         webSocketManager.connect()
     }
 
@@ -49,17 +35,16 @@ class DefaultChatWebSocketRepository @Inject constructor(
         thinkingEnabled: Boolean,
         searchEnabled: Boolean,
         attachments: List<ChatMessagePart>,
+        conversationHistory: List<Pair<String, String>>,
     ) {
         webSocketManager.sendMessage(
             content = content,
             messageId = messageId,
-            thinkingEnabled = thinkingEnabled,
-            searchEnabled = searchEnabled,
-            attachments = attachments,
+            conversationHistory = conversationHistory,
         )
     }
 
     override fun setServerUrl(url: String) {
-        webSocketManager.setServerUrl(url)
+        // 星火模式不需要手动设置URL，由鉴权自动生成
     }
 }
