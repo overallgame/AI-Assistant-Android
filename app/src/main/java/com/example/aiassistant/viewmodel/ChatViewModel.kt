@@ -2,16 +2,18 @@ package com.example.aiassistant.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.aiassistant.config.AppConfig
+import com.example.aiassistant.data.model.AttachmentTransferStatus
+import com.example.aiassistant.data.model.ChatFileType
 import com.example.aiassistant.data.model.ChatMessage
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.ChatRole
 import com.example.aiassistant.data.model.ChatUiState
-import com.example.aiassistant.data.model.ChatFileType
-import com.example.aiassistant.data.model.AttachmentTransferStatus
 import com.example.aiassistant.data.model.WebSocketConnectionState
 import com.example.aiassistant.data.repository.interfac.ChatWebSocketRepository
 import com.example.aiassistant.data.websocket.WebSocketEvent
+import com.example.aiassistant.speak.SpeakCallback
+import com.example.aiassistant.speak.SpeakManager
+import com.example.aiassistant.speak.SwitchStrategy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,11 +26,20 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlin.random.Random
 
+/**
+ * 待处理的流式更新项
+ */
+private data class PendingStreamUpdate(
+    val messageId: String,
+    val content: String = "",
+    val reasoning: String = ""
+)
+
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val webSocketRepository: ChatWebSocketRepository,
-    appConfig: AppConfig,
-) : ViewModel() {
+    private val speakManager: SpeakManager,
+) : ViewModel(), SpeakCallback {
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -36,64 +47,159 @@ class ChatViewModel @Inject constructor(
     val connectionState: StateFlow<WebSocketConnectionState>
         get() = webSocketRepository.connectionState
 
+    // 录音状态
+    val isRecording: StateFlow<Boolean>
+        get() = speakManager.isRecordingStateFlow()
+
     private val attachmentJobs = mutableMapOf<String, Job>()
+
+    // 流式更新缓冲（用于批量合并更新）
+    private val pendingStreamUpdates = mutableMapOf<String, PendingStreamUpdate>()
+    private var streamFlushJob: Job? = null
+
+    // 消息索引缓存（避免重复遍历）
+    private var messageIndexCache: Map<String, Int> = emptyMap()
 
     init {
         observeWebSocketEvents()
 
-        if (appConfig.autoConnect) {
-            connect()
-        }
+        // 初始化语音管理器，设置TTS为自动切换模式
+        speakManager.setTtsSwitchStrategy(SwitchStrategy.AUTO)
+        // 设置语音识别回调
+        speakManager.setCallback(this)
     }
 
     private fun observeWebSocketEvents() {
         viewModelScope.launch {
-            webSocketRepository.events.collect { event ->
-                when (event) {
-                    is WebSocketEvent.MessageReceived -> {
-                        // 流式结束消息，不需要再添加（已在chunk中处理）
-                    }
-                    is WebSocketEvent.Error -> {
-                        _uiState.update { it.copy(errorMessage = event.message, isSending = false) }
-                    }
-                    is WebSocketEvent.Connected -> {
-                        _uiState.update { it.copy(errorMessage = null) }
-                    }
-                    is WebSocketEvent.Disconnected -> {}
-                    is WebSocketEvent.ChunkReceived -> {
-                        updateStreamingMessage(event.messageId, event.content)
-                    }
-                    is WebSocketEvent.DoneReceived -> {
-                        finishStreamingMessage(event.messageId)
-                    }
-                    // 星火大模型事件
-                    is WebSocketEvent.XinghuoReasoningChunkReceived -> {
-                        // 处理推理内容流式输出
-                        updateStreamingReasoning(event.messageId, event.reasoning)
-                    }
-                    is WebSocketEvent.XinghuoContentChunkReceived -> {
-                        // 处理内容流式输出
-                        updateStreamingMessage(event.messageId, event.content)
-                    }
-                    is WebSocketEvent.XinghuoDoneReceived -> {
-                        // 流式结束
-                        finishStreamingMessage(event.messageId)
-                    }
-                    is WebSocketEvent.XinghuoError -> {
-                        _uiState.update {
-                            it.copy(
-                                errorMessage = "星火错误[${event.code}]: ${event.message}",
-                                isSending = false
-                            )
+            try {
+                webSocketRepository.events.collect { event ->
+                    when (event) {
+                        is WebSocketEvent.Error -> {
+                            _uiState.update {
+                                it.copy(
+                                    errorMessage = event.message,
+                                    isSending = false
+                                )
+                            }
+                        }
+
+                        is WebSocketEvent.Connected -> {
+                            _uiState.update { it.copy(errorMessage = null) }
+                        }
+
+                        is WebSocketEvent.Disconnected -> {
+                            _uiState.update { it.copy(isSending = false) }
+                        }
+                        is WebSocketEvent.Reconnecting -> {
+                            _uiState.update { it.copy(errorMessage = "正在重新连接...") }
+                        }
+                        // 星火大模型事件 - 合并处理
+                        is WebSocketEvent.XinghuoReasoningChunkReceived -> {
+                            bufferStreamUpdate(event.messageId, reasoning = event.reasoning)
+                        }
+
+                        is WebSocketEvent.XinghuoContentChunkReceived -> {
+                            bufferStreamUpdate(event.messageId, content = event.content)
+                        }
+
+                        is WebSocketEvent.XinghuoDoneReceived -> {
+                            // 立即刷新缓冲区
+                            flushStreamUpdates()
+                            finishStreamingMessage(event.messageId)
+                        }
+
+                        is WebSocketEvent.XinghuoError -> {
+                            _uiState.update {
+                                it.copy(
+                                    errorMessage = "星火错误[${event.code}]: ${event.message}",
+                                    isSending = false
+                                )
+                            }
                         }
                     }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "事件监听错误: ${e.message}", isSending = false)
                 }
             }
         }
     }
 
-    private fun connect() {
-        webSocketRepository.connect()
+    /**
+     * 缓冲流式更新，批量合并多个更新
+     */
+    private fun bufferStreamUpdate(
+        messageId: String,
+        content: String = "",
+        reasoning: String = ""
+    ) {
+        val current = pendingStreamUpdates[messageId] ?: PendingStreamUpdate(messageId)
+        pendingStreamUpdates[messageId] = current.copy(
+            content = current.content + content,
+            reasoning = current.reasoning + reasoning
+        )
+
+        // 调度批量刷新（防抖）
+        if (streamFlushJob?.isActive != true) {
+            streamFlushJob = viewModelScope.launch {
+                delay(50) // 50ms 防抖
+                flushStreamUpdates()
+            }
+        }
+    }
+
+    /**
+     * 批量刷新流式更新到 UI
+     */
+    private fun flushStreamUpdates() {
+        if (pendingStreamUpdates.isEmpty()) return
+
+        val updates = pendingStreamUpdates.toMap()
+        pendingStreamUpdates.clear()
+
+        _uiState.update { state ->
+            val newMessages = state.messages.toMutableList()
+            var messagesChanged = false
+
+            for ((messageId, update) in updates) {
+                val idx = newMessages.indexOfFirst { it.id == messageId }
+
+                if (idx >= 0) {
+                    // 更新现有消息
+                    val existingMsg = newMessages[idx]
+                    val newParts = existingMsg.parts.map { part ->
+                        if (part is ChatMessagePart.Text) {
+                            part.copy(
+                                text = part.text + update.content,
+                                reasoning = part.reasoning + update.reasoning
+                            )
+                        } else {
+                            part
+                        }
+                    }
+                    newMessages[idx] = existingMsg.copy(parts = newParts, isStreaming = true)
+                    messagesChanged = true
+                } else {
+                    // 新建消息（首次接收）
+                    val newMessage = ChatMessage(
+                        id = messageId,
+                        role = ChatRole.Assistant,
+                        parts = listOf(ChatMessagePart.Text(update.content, update.reasoning)),
+                        isStreaming = true,
+                    )
+                    newMessages.add(newMessage)
+                    messagesChanged = true
+                }
+            }
+
+            if (messagesChanged) {
+                // 更新索引缓存
+                messageIndexCache = newMessages.mapIndexed { index, msg -> msg.id to index }.toMap()
+            }
+
+            state.copy(messages = newMessages, isSending = false)
+        }
     }
 
     private fun disconnect() {
@@ -101,9 +207,18 @@ class ChatViewModel @Inject constructor(
     }
 
     fun newChat() {
-        _uiState.update { it.copy(messages = emptyList(), inputText = "", errorMessage = null) }
+        _uiState.update {
+            it.copy(
+                messages = emptyList(),
+                inputText = "",
+                systemPrompt = "",
+                errorMessage = null
+            )
+        }
         attachmentJobs.values.forEach { it.cancel() }
         attachmentJobs.clear()
+        pendingStreamUpdates.clear()
+        messageIndexCache = emptyMap()
     }
 
     fun setInputText(text: String) {
@@ -136,6 +251,8 @@ class ChatViewModel @Inject constructor(
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
             newMessages.add(userMessage)
+            // 更新索引缓存
+            messageIndexCache = newMessages.mapIndexed { index, msg -> msg.id to index }.toMap()
             state.copy(
                 messages = newMessages,
                 inputText = "",
@@ -146,44 +263,35 @@ class ChatViewModel @Inject constructor(
         val messageId = UUID.randomUUID().toString()
 
         // 构建对话历史（用于多轮对话）
-        val history = currentState.messages.mapNotNull { msg ->
+        val history = mutableListOf<Pair<String, String>>()
+
+        // 添加 system 消息（如果存在）
+        val systemPrompt = currentState.systemPrompt
+        if (systemPrompt.isNotBlank()) {
+            history.add("system" to systemPrompt)
+        }
+
+        // 添加对话历史
+        currentState.messages.forEach { msg ->
             val textParts = msg.parts.filterIsInstance<ChatMessagePart.Text>()
-            if (textParts.isEmpty()) return@mapNotNull null
-            
+            if (textParts.isEmpty()) return@forEach
+
             val msgContent = textParts.joinToString("") { it.text }
             val role = when (msg.role) {
+                ChatRole.System -> "system"
                 ChatRole.User -> "user"
                 ChatRole.Assistant -> "assistant"
             }
-            role to msgContent
+            history.add(role to msgContent)
         }
 
-        if (connectionState.value == WebSocketConnectionState.Connected) {
-            webSocketRepository.sendMessage(
-                content = content,
-                messageId = messageId,
-                conversationHistory = history,
-            )
-        } else {
-            viewModelScope.launch {
-                webSocketRepository.connect()
-                // 等待连接成功或超时
-                var waited = 0
-                while (connectionState.value != WebSocketConnectionState.Connected && waited < 10000) {
-                    delay(100)
-                    waited += 100
-                }
-                if (connectionState.value == WebSocketConnectionState.Connected) {
-                    webSocketRepository.sendMessage(
-                        content = content,
-                        messageId = messageId,
-                        conversationHistory = history,
-                    )
-                } else {
-                    _uiState.update { it.copy(errorMessage = "无法连接到服务器", isSending = false) }
-                }
-            }
-        }
+        webSocketRepository.sendMessage(
+            content = content,
+            messageId = messageId,
+            conversationHistory = history,
+            thinkingEnabled = currentState.mode.thinkingEnabled,
+            searchEnabled = currentState.mode.searchEnabled,
+        )
     }
 
     fun sendImage(
@@ -209,6 +317,7 @@ class ChatViewModel @Inject constructor(
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
             newMessages.add(message)
+            messageIndexCache = newMessages.mapIndexed { index, msg -> msg.id to index }.toMap()
             state.copy(messages = newMessages)
         }
 
@@ -239,6 +348,7 @@ class ChatViewModel @Inject constructor(
         _uiState.update { state ->
             val newMessages = state.messages.toMutableList()
             newMessages.add(message)
+            messageIndexCache = newMessages.mapIndexed { index, msg -> msg.id to index }.toMap()
             state.copy(messages = newMessages)
         }
 
@@ -269,99 +379,39 @@ class ChatViewModel @Inject constructor(
             mimeType == "application/pdf" || name.endsWith(".pdf") -> ChatFileType.Pdf
             mimeType == "text/csv" || name.endsWith(".csv") -> ChatFileType.Csv
             mimeType == "application/msword" ||
-                mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-                name.endsWith(".doc") ||
-                name.endsWith(".docx") -> ChatFileType.Word
+                    mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                    name.endsWith(".doc") ||
+                    name.endsWith(".docx") -> ChatFileType.Word
+
             mimeType?.startsWith("image/") == true -> ChatFileType.Image
             else -> ChatFileType.Other
         }
     }
 
-    fun clearError() {
-        _uiState.update { it.copy(errorMessage = null) }
-    }
-    
-    private fun addAssistantMessage(message: ChatMessage) {
-        _uiState.update { state ->
-            val newMessages = state.messages.toMutableList()
-            newMessages.add(message)
-            state.copy(
-                messages = newMessages,
-                isSending = false,
-            )
-        }
+    // ==================== 语音识别相关 ====================
+
+    fun startVoiceRecognition(): Boolean {
+        return speakManager.startRecordingAndRecognition()
     }
 
-    // 处理流式接收的文本块
-    private fun updateStreamingMessage(messageId: String, newContent: String) {
-        _uiState.update { state ->
-            val idx = state.messages.indexOfFirst { it.id == messageId }
-            val newMessages = state.messages.toMutableList()
-
-            if (idx >= 0) {
-                // 更新现有消息 - 追加新内容
-                val existingMsg = newMessages[idx]
-                val newParts = existingMsg.parts.map { part ->
-                    if (part is ChatMessagePart.Text) {
-                        // 追加新内容到现有文本
-                        part.copy(text = part.text + newContent)
-                    } else {
-                        part
-                    }
-                }
-                newMessages[idx] = existingMsg.copy(parts = newParts, isStreaming = true)
-            } else {
-                // 新建消息（首次接收）
-                val newMessage = ChatMessage(
-                    id = messageId,
-                    role = ChatRole.Assistant,
-                    parts = listOf(ChatMessagePart.Text(newContent)),
-                    isStreaming = true,
-                )
-                newMessages.add(newMessage)
-            }
-
-            state.copy(
-                messages = newMessages,
-                isSending = false,
-            )
-        }
+    fun stopVoiceRecognition() {
+        speakManager.stopRecordingAndRecognition()
     }
 
-    // 处理流式接收的推理内容
-    private fun updateStreamingReasoning(messageId: String, newReasoning: String) {
-        _uiState.update { state ->
-            val idx = state.messages.indexOfFirst { it.id == messageId }
-            val newMessages = state.messages.toMutableList()
-
-            if (idx >= 0) {
-                val existingMsg = newMessages[idx]
-                val newParts = existingMsg.parts.map { part ->
-                    if (part is ChatMessagePart.Text) {
-                        // 追加新推理内容到现有推理
-                        part.copy(reasoning = part.reasoning + newReasoning)
-                    } else {
-                        part
-                    }
-                }
-                newMessages[idx] = existingMsg.copy(parts = newParts, isStreaming = true)
-            } else {
-                // 如果消息还不存在，先创建
-                val newMessage = ChatMessage(
-                    id = messageId,
-                    role = ChatRole.Assistant,
-                    parts = listOf(ChatMessagePart.Text("", newReasoning)),
-                    isStreaming = true,
-                )
-                newMessages.add(newMessage)
-            }
-
-            state.copy(
-                messages = newMessages,
-                isSending = false,
-            )
-        }
+    override fun onAsrResult(text: String, isFinal: Boolean) {
+        _uiState.update { it.copy(inputText = text) }
     }
+
+    override fun onAsrError(errorCode: Int, errorMessage: String) {
+        _uiState.update { it.copy(errorMessage = "语音识别错误: $errorMessage") }
+    }
+
+    override fun onRecordingStarted() {}
+    override fun onRecordingStopped() {}
+    override fun onTtsStart() {}
+    override fun onTtsData(audioData: ByteArray) {}
+    override fun onTtsComplete() {}
+    override fun onTtsError(errorCode: Int, errorMessage: String) {}
 
     // 流式输出完成
     private fun finishStreamingMessage(messageId: String) {
@@ -451,7 +501,7 @@ class ChatViewModel @Inject constructor(
             state.copy(messages = newMessages)
         }
     }
-    
+
     override fun onCleared() {
         super.onCleared()
         disconnect()

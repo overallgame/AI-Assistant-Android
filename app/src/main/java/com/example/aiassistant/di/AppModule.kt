@@ -23,6 +23,7 @@ import com.example.aiassistant.data.source.interfac.RemoteConversationDataSource
 import com.example.aiassistant.data.source.interfac.RemoteUserDataSource
 import com.example.aiassistant.data.source.RoomLocalUserDataSource
 import com.example.aiassistant.data.websocket.ChatWebSocketManager
+import com.example.aiassistant.speak.SpeakManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -45,9 +46,9 @@ object NetworkModule {
     fun provideOkHttpClient(appConfig: AppConfig): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .pingInterval(30, TimeUnit.SECONDS)
+            .pingInterval(0, TimeUnit.SECONDS)
 
         // 仅在调试模式下启用日志
         if (appConfig.debugLogging) {
@@ -198,5 +199,16 @@ object AppModule {
         webSocketManager: ChatWebSocketManager,
     ): ChatWebSocketRepository {
         return DefaultChatWebSocketRepository(webSocketManager)
+    }
+
+    /**
+     * 提供语音管理器（讯飞SDK）
+     */
+    @Provides
+    @Singleton
+    fun provideSpeakManager(@ApplicationContext context: Context): SpeakManager {
+        return SpeakManager(context).apply {
+            init()
+        }
     }
 }

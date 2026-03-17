@@ -71,7 +71,10 @@ fun FilePickerPage(
                 title = { Text(text = "选择文件") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = null
+                        )
                     }
                 },
                 actions = {
@@ -154,7 +157,13 @@ private fun ContentResolver.toPickedFile(uri: Uri): PickedFile {
     var fileName: String? = null
     var sizeBytes: Long? = null
 
-    query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+    query(
+        uri,
+        arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+        null,
+        null,
+        null
+    )?.use { c ->
         val nameIdx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
         val sizeIdx = c.getColumnIndex(OpenableColumns.SIZE)
         if (c.moveToFirst()) {

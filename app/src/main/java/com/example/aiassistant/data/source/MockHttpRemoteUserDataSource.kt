@@ -62,37 +62,43 @@ class MockHttpRemoteUserDataSource(
         }
     }
 
-    override suspend fun updateAvatar(userId: String, avatar: Avatar): User = withContext(Dispatchers.IO) {
-        ensureStarted()
-        val body = """{"avatarType": "${avatar.type.name}", "avatarValue": ${avatar.value?.let { "\"$it\"" } ?: "null"}}"""
-            .toRequestBody(jsonMediaType)
-        val request = Request.Builder()
-            .url("$baseUrl/api/user/$userId/avatar")
-            .put(body)
-            .build()
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Update avatar failed: ${response.code}")
-            val responseBody = response.body?.string() ?: error("Empty response body")
-            parseUser(responseBody)
+    override suspend fun updateAvatar(userId: String, avatar: Avatar): User =
+        withContext(Dispatchers.IO) {
+            ensureStarted()
+            val body =
+                """{"avatarType": "${avatar.type.name}", "avatarValue": ${avatar.value?.let { "\"$it\"" } ?: "null"}}"""
+                    .toRequestBody(jsonMediaType)
+            val request = Request.Builder()
+                .url("$baseUrl/api/user/$userId/avatar")
+                .put(body)
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("Update avatar failed: ${response.code}")
+                val responseBody = response.body?.string() ?: error("Empty response body")
+                parseUser(responseBody)
+            }
         }
-    }
 
-    override suspend fun updateDisplayName(userId: String, displayName: String?): User = withContext(Dispatchers.IO) {
-        ensureStarted()
-        val nameJson = displayName?.let { "\"$it\"" } ?: "null"
-        val body = """{"displayName": $nameJson}""".toRequestBody(jsonMediaType)
-        val request = Request.Builder()
-            .url("$baseUrl/api/user/$userId/display-name")
-            .put(body)
-            .build()
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Update display name failed: ${response.code}")
-            val responseBody = response.body?.string() ?: error("Empty response body")
-            parseUser(responseBody)
+    override suspend fun updateDisplayName(userId: String, displayName: String?): User =
+        withContext(Dispatchers.IO) {
+            ensureStarted()
+            val nameJson = displayName?.let { "\"$it\"" } ?: "null"
+            val body = """{"displayName": $nameJson}""".toRequestBody(jsonMediaType)
+            val request = Request.Builder()
+                .url("$baseUrl/api/user/$userId/display-name")
+                .put(body)
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("Update display name failed: ${response.code}")
+                val responseBody = response.body?.string() ?: error("Empty response body")
+                parseUser(responseBody)
+            }
         }
-    }
 
-    override suspend fun updatePreferences(userId: String, preferences: UserPreferences): UserPreferences =
+    override suspend fun updatePreferences(
+        userId: String,
+        preferences: UserPreferences
+    ): UserPreferences =
         withContext(Dispatchers.IO) {
             ensureStarted()
             val body = """{"preferences": true}""".toRequestBody(jsonMediaType)
@@ -115,7 +121,8 @@ class MockHttpRemoteUserDataSource(
         val displayName = obj["displayName"]?.asPrimitive?.content
         val avatarTypeStr = obj["avatarType"]?.asPrimitive?.content ?: AvatarType.Default.name
         val avatarValue = obj["avatarValue"]?.asPrimitive?.content
-        val avatarType = runCatching { AvatarType.valueOf(avatarTypeStr) }.getOrDefault(AvatarType.Default)
+        val avatarType =
+            runCatching { AvatarType.valueOf(avatarTypeStr) }.getOrDefault(AvatarType.Default)
         return User(
             id = id,
             phoneE164 = phoneE164,

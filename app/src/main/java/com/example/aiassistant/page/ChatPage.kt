@@ -2,11 +2,18 @@ package com.example.aiassistant.page
 
 import android.net.Uri
 import android.util.Size
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MicNone
@@ -66,18 +74,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.view.HapticFeedbackConstantsCompat
+import androidx.core.view.ViewCompat.performHapticFeedback
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.aiassistant.data.model.AttachmentTransferStatus
 import com.example.aiassistant.data.model.ChatMessage
 import com.example.aiassistant.data.model.ChatMessagePart
 import com.example.aiassistant.data.model.ChatRole
+import com.example.aiassistant.data.model.WebSocketConnectionState
 import com.example.aiassistant.viewmodel.ChatViewModel
 import androidx.compose.material.icons.filled.Image as ImageIcon
 
@@ -88,11 +101,13 @@ fun ChatPage(
     onNewChat: () -> Unit,
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
+    onStartCall: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    val isRecording by viewModel.isRecording.collectAsState()
 
     val colors = MaterialTheme.colorScheme
 
@@ -125,6 +140,11 @@ fun ChatPage(
                 }
             },
             actions = {
+                IconButton(
+                    onClick = onStartCall,
+                ) {
+                    Icon(imageVector = Icons.Filled.Call, contentDescription = "语音通话")
+                }
                 IconButton(
                     onClick = {
                         viewModel.newChat()
@@ -163,10 +183,13 @@ fun ChatPage(
             onSend = viewModel::sendMessage,
             onPickImage = onPickImage,
             onPickFile = onPickFile,
-            isSending = uiState.isSending,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
+            isSending = uiState.isSending,
+            isRecording = isRecording,
+            onStartVoiceRecognition = viewModel::startVoiceRecognition,
+            onStopVoiceRecognition = viewModel::stopVoiceRecognition,
         )
     }
 }
@@ -204,9 +227,19 @@ private fun ChatConversation(
 ) {
     val listState = rememberLazyListState()
 
+    // 获取最后一条消息的内容，用于监听变化
+    val lastMessage = messages.lastOrNull()
+    val lastMessageText =
+        lastMessage?.parts?.filterIsInstance<ChatMessagePart.Text>()?.joinToString("") { it.text }
+            ?: ""
+    val lastMessageReasoning = lastMessage?.parts?.filterIsInstance<ChatMessagePart.Text>()
+        ?.joinToString("") { it.reasoning } ?: ""
+    val isStreaming = lastMessage?.isStreaming == true
+
     // 自动滚动到最新消息
-    LaunchedEffect(messages.size) {
+    LaunchedEffect(messages.size, lastMessageText, lastMessageReasoning, isStreaming) {
         if (messages.isNotEmpty()) {
+            // 如果正在流式输出或内容变化，立即滚动到底部
             listState.animateScrollToItem(messages.size - 1)
         }
     }
@@ -274,10 +307,16 @@ private fun ChatMessageItem(
                         }
 
                         is ChatMessagePart.Image -> {
-                            // ... existing code ...
-                            val thumbBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = part.contentUri) {
+                            val thumbBitmap by produceState<android.graphics.Bitmap?>(
+                                initialValue = null,
+                                key1 = part.contentUri
+                            ) {
                                 value = try {
-                                    contentResolver.loadThumbnail(Uri.parse(part.contentUri), Size(420, 420), null)
+                                    contentResolver.loadThumbnail(
+                                        Uri.parse(part.contentUri),
+                                        Size(420, 420),
+                                        null
+                                    )
                                 } catch (_: Throwable) {
                                     null
                                 }
@@ -417,7 +456,11 @@ private fun AttachmentStatusRow(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 TextButton(onClick = onRetry) {
-                    Icon(imageVector = Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = "重试")
                 }
@@ -439,10 +482,13 @@ private fun ChatInputBar(
     onSend: () -> Unit,
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
-    isSending: Boolean = false,
     modifier: Modifier = Modifier,
+    isSending: Boolean = false,
+    isRecording: Boolean = false,
+    onStartVoiceRecognition: () -> Unit = {},
+    onStopVoiceRecognition: () -> Unit = {},
 ) {
-    val canSend = inputText.isNotBlank() || isSending
+    val canSend = inputText.isNotBlank()
     var showAttachmentMenu by remember { mutableStateOf(false) }
 
     ChatInputCard(
@@ -465,8 +511,11 @@ private fun ChatInputBar(
             onPickFile()
         },
         onSend = onSend,
-        isSending = isSending,
         modifier = modifier,
+        isSending = isSending,
+        isRecording = isRecording,
+        onStartVoiceRecognition = onStartVoiceRecognition,
+        onStopVoiceRecognition = onStopVoiceRecognition,
     )
 }
 
@@ -485,10 +534,15 @@ private fun ChatInputCard(
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
     onSend: () -> Unit,
-    isSending: Boolean = false,
     modifier: Modifier = Modifier,
+    isSending: Boolean = false,
+    isRecording: Boolean = false,
+    onStartVoiceRecognition: () -> Unit = {},
+    onStopVoiceRecognition: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
+
+    val isInputEnabled = !isRecording
 
     Surface(
         color = colors.surface.copy(alpha = 0.92f),
@@ -503,11 +557,37 @@ private fun ChatInputCard(
             TextField(
                 value = inputText,
                 onValueChange = onInputChange,
+                enabled = isInputEnabled,
                 placeholder = {
-                    Text(
-                        text = "发消息或按住说话",
-                        color = colors.onSurfaceVariant,
-                    )
+                    if (isRecording && inputText.isEmpty()) {
+                        // 录音中但还没有识别结果时显示提示
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = colors.primary,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "正在录音...",
+                                color = colors.primary,
+                            )
+                        }
+                    } else if (isRecording && inputText.isNotEmpty()) {
+                        // 录音中有实时识别结果时显示
+                        Text(
+                            text = inputText,
+                            color = colors.primary,
+                        )
+                    } else {
+                        Text(
+                            text = "发消息或按住说话",
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -521,8 +601,10 @@ private fun ChatInputCard(
                     disabledIndicatorColor = Color.Transparent,
                     focusedTextColor = colors.onSurface,
                     unfocusedTextColor = colors.onSurface,
+                    disabledTextColor = colors.onSurface.copy(alpha = 0.6f),
                     focusedPlaceholderColor = colors.onSurfaceVariant,
                     unfocusedPlaceholderColor = colors.onSurfaceVariant,
+                    disabledPlaceholderColor = colors.tertiary,
                     cursorColor = colors.primary,
                 ),
             )
@@ -573,14 +655,20 @@ private fun ChatInputCard(
                             DropdownMenuItem(
                                 text = { Text(text = "图片") },
                                 leadingIcon = {
-                                    Icon(imageVector = Icons.Filled.ImageIcon, contentDescription = null)
+                                    Icon(
+                                        imageVector = Icons.Filled.ImageIcon,
+                                        contentDescription = null
+                                    )
                                 },
                                 onClick = onPickImage,
                             )
                             DropdownMenuItem(
                                 text = { Text(text = "文件") },
                                 leadingIcon = {
-                                    Icon(imageVector = Icons.Filled.AttachFile, contentDescription = null)
+                                    Icon(
+                                        imageVector = Icons.Filled.AttachFile,
+                                        contentDescription = null
+                                    )
                                 },
                                 onClick = onPickFile,
                             )
@@ -589,46 +677,66 @@ private fun ChatInputCard(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    if (isSending) {
-                        FilledIconButton(
-                            onClick = { },
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = colors.primary.copy(alpha = 0.7f),
-                                contentColor = colors.onPrimary,
-                            ),
-                            enabled = false,
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = colors.onPrimary,
-                                strokeWidth = 2.dp,
+                    when {
+                        // 录音中：显示停止按钮
+                        isRecording -> {
+                            FilledIconButton(
+                                onClick = onStopVoiceRecognition,
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = colors.error,
+                                    contentColor = colors.onError,
+                                ),
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.MicNone,
+                                    contentDescription = "停止录音"
+                                )
+                            }
+                        }
+                        // 发送中（接收中）：显示加载，禁用发送
+                        isSending -> {
+                            FilledIconButton(
+                                onClick = { },
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = colors.primary.copy(alpha = 0.7f),
+                                    contentColor = colors.onPrimary,
+                                ),
+                                enabled = false,
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = colors.onPrimary,
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                        // 有文字可发送：显示发送按钮（点击时会自动建立连接）
+                        canSend -> {
+                            FilledIconButton(
+                                onClick = onSend,
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = colors.primary,
+                                    contentColor = colors.onPrimary,
+                                ),
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                        // 其他情况：显示麦克风按钮
+                        else -> {
+                            VoiceRecordButton(
+                                onStartRecording = onStartVoiceRecognition,
+                                onStopRecording = onStopVoiceRecognition,
                             )
-                        }
-                    } else if (canSend) {
-                        FilledIconButton(
-                            onClick = onSend,
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = colors.primary,
-                                contentColor = colors.onPrimary,
-                            ),
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                        }
-                    } else {
-                        OutlinedIconButton(
-                            onClick = { onSend() },
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.outlinedIconButtonColors(
-                                contentColor = colors.onSurface,
-                            ),
-                            border = BorderStroke(1.dp, colors.outlineVariant),
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(imageVector = Icons.Filled.MicNone, contentDescription = null)
                         }
                     }
                 }
@@ -678,13 +786,14 @@ private fun StreamingText(
     style: androidx.compose.ui.text.TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "cursor")
+    val infiniteTransition =
+        rememberInfiniteTransition(label = "cursor")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 0.4f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(durationMillis = 500),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500),
+            repeatMode = RepeatMode.Reverse,
         ),
         label = "cursorAlpha"
     )
@@ -707,18 +816,18 @@ private fun StreamingText(
 
 @Composable
 private fun ConnectionStatusChip(
-    connectionState: com.example.aiassistant.data.model.WebSocketConnectionState,
+    connectionState: WebSocketConnectionState,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    
+
     val (text, color) = when (connectionState) {
-        com.example.aiassistant.data.model.WebSocketConnectionState.Connected -> "已连接" to colors.primary
-        com.example.aiassistant.data.model.WebSocketConnectionState.Connecting -> "连接中..." to colors.tertiary
-        com.example.aiassistant.data.model.WebSocketConnectionState.Reconnecting -> "重连中..." to colors.tertiary
-        com.example.aiassistant.data.model.WebSocketConnectionState.Disconnected -> "未连接" to colors.error
+        WebSocketConnectionState.Connected -> "已连接" to colors.primary
+        WebSocketConnectionState.Connecting -> "连接中..." to colors.tertiary
+        WebSocketConnectionState.Reconnecting -> "重连中..." to colors.tertiary
+        WebSocketConnectionState.Disconnected -> "未连接" to colors.error
     }
-    
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -737,6 +846,100 @@ private fun ConnectionStatusChip(
             text = text,
             color = colors.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+/**
+ * 长按录音按钮
+ * 按住开始录音，松开停止录音
+ */
+@Composable
+private fun VoiceRecordButton(
+    onStartRecording: () -> Unit,
+    onStopRecording: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    LocalContext.current
+    var isPressed by remember { mutableStateOf(false) }
+
+    // 获取当前的 View
+    val view = androidx.compose.ui.platform.LocalView.current
+
+    // 按下时的缩放动画
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 1.1f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+
+    // 按下时的背景颜色
+    val backgroundColor by animateFloatAsState(
+        targetValue = if (isPressed) 0.15f else 0f,
+        animationSpec = tween(durationMillis = 150),
+        label = "backgroundAlpha"
+    )
+
+    // 边框颜色
+    val borderColor by animateFloatAsState(
+        targetValue = if (isPressed) 1f else 0.38f,
+        animationSpec = tween(durationMillis = 150),
+        label = "borderAlpha"
+    )
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(40.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        // 震动反馈
+                        performHapticFeedback(view, HapticFeedbackConstantsCompat.LONG_PRESS)
+                        isPressed = true
+                        onStartRecording()
+                        tryAwaitRelease()
+                        isPressed = false
+                        onStopRecording()
+                    }
+                )
+            }
+    ) {
+        // 边框背景
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(colors.surface)
+                .border(
+                    width = 1.dp,
+                    color = colors.outlineVariant.copy(alpha = borderColor),
+                    shape = CircleShape
+                )
+        )
+
+        // 按下时的背景效果
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(colors.error.copy(alpha = backgroundColor))
+        )
+
+        Icon(
+            imageVector = Icons.Filled.MicNone,
+            contentDescription = "按住说话",
+            tint = if (isPressed) colors.error else colors.onSurface,
+            modifier = Modifier
+                .size(22.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
         )
     }
 }

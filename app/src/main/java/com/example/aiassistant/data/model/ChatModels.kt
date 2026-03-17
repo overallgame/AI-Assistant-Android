@@ -3,6 +3,7 @@ package com.example.aiassistant.data.model
 import java.util.UUID
 
 enum class ChatRole {
+    System,
     User,
     Assistant,
 }
@@ -64,7 +65,7 @@ data class ChatMessage(
 )
 
 data class ChatMode(
-    val thinkingEnabled: Boolean = true,
+    val thinkingEnabled: Boolean = false,
     val searchEnabled: Boolean = false,
 )
 
@@ -72,6 +73,7 @@ data class ChatUiState(
     val title: String = "新对话",
     val messages: List<ChatMessage> = emptyList(),
     val inputText: String = "",
+    val systemPrompt: String = "", // System 提示词
     val mode: ChatMode = ChatMode(),
     val isSending: Boolean = false,
     val errorMessage: String? = null,

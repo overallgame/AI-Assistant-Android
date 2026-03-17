@@ -65,7 +65,7 @@ class AuthViewModel @Inject constructor(
                 infoMessage = "验证码已发送（测试码：$mockSmsCode）",
             )
         }
-        startCountdown(seconds = 60)
+        startCountdown()
     }
 
     fun loginWithCode(phone: String, code: String, onSuccess: () -> Unit) {
@@ -150,10 +150,10 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    private fun startCountdown(seconds: Int) {
+    private fun startCountdown() {
         countdownJob?.cancel()
         countdownJob = viewModelScope.launch {
-            for (s in seconds downTo 0) {
+            for (s in 60 downTo 0) {
                 _uiState.update { it.copy(codeSecondsRemaining = s) }
                 delay(1000)
             }

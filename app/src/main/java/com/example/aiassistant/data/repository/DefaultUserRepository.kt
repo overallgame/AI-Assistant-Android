@@ -27,9 +27,11 @@ class DefaultUserRepository(
             AuthMode.LOCAL_ONLY -> {
                 loginLocally(phoneE164)
             }
+
             AuthMode.LOCAL_THEN_REMOTE -> {
                 tryLoginLocalThenRemote(phoneE164)
             }
+
             AuthMode.REMOTE_ONLY -> {
                 loginRemotely(phoneE164)
             }
@@ -105,6 +107,7 @@ class DefaultUserRepository(
             AuthMode.LOCAL_ONLY -> {
                 local.updateAvatar(avatar)
             }
+
             AuthMode.LOCAL_THEN_REMOTE -> {
                 try {
                     val updatedUser = remote.updateAvatar(currentUserId, avatar)
@@ -113,6 +116,7 @@ class DefaultUserRepository(
                     local.updateAvatar(avatar)
                 }
             }
+
             AuthMode.REMOTE_ONLY -> {
                 val updatedUser = remote.updateAvatar(currentUserId, avatar)
                 local.setUser(updatedUser)
@@ -127,6 +131,7 @@ class DefaultUserRepository(
             AuthMode.LOCAL_ONLY -> {
                 local.updateDisplayName(displayName)
             }
+
             AuthMode.LOCAL_THEN_REMOTE -> {
                 try {
                     val updatedUser = remote.updateDisplayName(currentUserId, displayName)
@@ -135,6 +140,7 @@ class DefaultUserRepository(
                     local.updateDisplayName(displayName)
                 }
             }
+
             AuthMode.REMOTE_ONLY -> {
                 val updatedUser = remote.updateDisplayName(currentUserId, displayName)
                 local.setUser(updatedUser)
@@ -170,6 +176,7 @@ class DefaultUserRepository(
             AuthMode.LOCAL_ONLY -> {
                 local.updatePreferences(newPrefs)
             }
+
             AuthMode.LOCAL_THEN_REMOTE -> {
                 try {
                     val remotePrefs = remote.updatePreferences(currentUserId, newPrefs)
@@ -178,6 +185,7 @@ class DefaultUserRepository(
                     local.updatePreferences(newPrefs)
                 }
             }
+
             AuthMode.REMOTE_ONLY -> {
                 val remotePrefs = remote.updatePreferences(currentUserId, newPrefs)
                 local.updatePreferences(remotePrefs)

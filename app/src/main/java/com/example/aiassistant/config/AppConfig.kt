@@ -36,17 +36,9 @@ class AppConfig @Inject constructor(
         get() = prefs.getString(KEY_XINGHUO_THINKING_TYPE, DEFAULT_THINKING_TYPE) ?: DEFAULT_THINKING_TYPE
         set(value) = prefs.edit().putString(KEY_XINGHUO_THINKING_TYPE, value).apply()
 
-    var searchEnabled: Boolean
-        get() = prefs.getBoolean(KEY_XINGHUO_SEARCH_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_XINGHUO_SEARCH_ENABLED, value).apply()
-
     var searchMode: String
         get() = prefs.getString(KEY_XINGHUO_SEARCH_MODE, DEFAULT_SEARCH_MODE) ?: DEFAULT_SEARCH_MODE
         set(value) = prefs.edit().putString(KEY_XINGHUO_SEARCH_MODE, value).apply()
-    
-    var autoConnect: Boolean
-        get() = prefs.getBoolean(KEY_AUTO_CONNECT, true)
-        set(value) = prefs.edit().putBoolean(KEY_AUTO_CONNECT, value).apply()
 
     var useMockBackend: Boolean
         get() = prefs.getBoolean(KEY_USE_MOCK_BACKEND, DEFAULT_USE_MOCK_BACKEND)
@@ -62,7 +54,6 @@ class AppConfig @Inject constructor(
 
     companion object {
         private const val PREFS_NAME = "ai_assistant_config"
-        private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_USE_MOCK_BACKEND = "use_mock_backend"
         private const val KEY_DEBUG_LOGGING = "debug_logging"
         private const val KEY_FORCE_LOCAL_AUTH = "force_local_auth"
@@ -73,7 +64,6 @@ class AppConfig @Inject constructor(
         private const val KEY_XINGHUO_API_SECRET = "xinghuo_api_secret"
         private const val KEY_XINGHUO_DOMAIN = "xinghuo_domain"
         private const val KEY_XINGHUO_THINKING_TYPE = "xinghuo_thinking_type"
-        private const val KEY_XINGHUO_SEARCH_ENABLED = "xinghuo_search_enabled"
         private const val KEY_XINGHUO_SEARCH_MODE = "xinghuo_search_mode"
 
         const val DEFAULT_USE_MOCK_BACKEND = false

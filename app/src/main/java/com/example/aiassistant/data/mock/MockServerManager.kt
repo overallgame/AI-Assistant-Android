@@ -104,24 +104,30 @@ class MockServerManager @Inject constructor() {
                 val response = when {
                     path.startsWith("/api/user/login") && method == "POST" ->
                         handler.handleLogin(body)
+
                     path.startsWith("/api/conversations") && method == "GET" ->
                         handler.handleGetConversations()
+
                     path.matches(Regex("/api/user/[^/]+/avatar")) && method == "PUT" -> {
                         val userId = path.removePrefix("/api/user/").removeSuffix("/avatar")
                         handler.handleUpdateUser(userId, body)
                     }
+
                     path.matches(Regex("/api/user/[^/]+/display-name")) && method == "PUT" -> {
                         val userId = path.removePrefix("/api/user/").removeSuffix("/display-name")
                         handler.handleUpdateUser(userId, body)
                     }
+
                     path.matches(Regex("/api/user/[^/]+/preferences")) && method == "PUT" -> {
                         val userId = path.removePrefix("/api/user/").removeSuffix("/preferences")
                         handler.handleUpdateUser(userId, body)
                     }
+
                     path.matches(Regex("/api/user/[^/]+")) && method == "GET" -> {
                         val userId = path.removePrefix("/api/user/")
                         handler.handleGetUser(userId)
                     }
+
                     else -> HttpMockResponse(404, """{"error": "Not found: $path"}""")
                 }
                 MockResponse()

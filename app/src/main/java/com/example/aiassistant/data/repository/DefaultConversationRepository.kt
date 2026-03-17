@@ -30,11 +30,4 @@ class DefaultConversationRepository(
             groups
         }
     }
-
-    suspend fun clearCache() {
-        cacheMutex.withLock {
-            cachedGroups = null
-            cacheTimestamp = 0
-        }
-    }
 }

@@ -12,13 +12,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.aiassistant.data.model.PickedFile
 import com.example.aiassistant.data.model.PickedImage
 import com.example.aiassistant.page.AccountManagementPage
+import com.example.aiassistant.page.CallPage
 import com.example.aiassistant.page.ChatPage
 import com.example.aiassistant.page.FilePickerPage
 import com.example.aiassistant.page.FontSizePage
@@ -41,14 +41,10 @@ private val authScreens = setOf(
 
 private val mainScreens = setOf(
     Screen.Chat.route,
+    Screen.Call.route,
     Screen.Settings.route,
     Screen.AccountManagement.route,
     Screen.FontSize.route,
-)
-
-private val pickerScreens = setOf(
-    Screen.ImagePicker.route,
-    Screen.FilePicker.route,
 )
 
 @Composable
@@ -150,7 +146,40 @@ fun AppNavGraph(
                 onNewChat = { },
                 onPickImage = { navController.navigate(Screen.ImagePicker.route) },
                 onPickFile = { navController.navigate(Screen.FilePicker.route) },
+                onStartCall = { navController.navigate(Screen.Call.route) },
                 viewModel = chatViewModel,
+            )
+        }
+
+        composable(
+            route = Screen.Call.route,
+            enterTransition = {
+                slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(ANIMATION_DURATION)
+                )
+            },
+            exitTransition = {
+                slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(ANIMATION_DURATION)
+                )
+            },
+            popEnterTransition = {
+                slideInVertically(
+                    initialOffsetY = { -it },
+                    animationSpec = tween(ANIMATION_DURATION)
+                )
+            },
+            popExitTransition = {
+                slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(ANIMATION_DURATION)
+                )
+            },
+        ) {
+            CallPage(
+                onEndCall = { navController.popBackStack() },
             )
         }
 

@@ -52,7 +52,10 @@ class FakeRemoteUserDataSource : RemoteUserDataSource {
         return updated
     }
 
-    override suspend fun updatePreferences(userId: String, preferences: UserPreferences): UserPreferences {
+    override suspend fun updatePreferences(
+        userId: String,
+        preferences: UserPreferences
+    ): UserPreferences {
         delay(120)
         return preferences
     }

@@ -8,6 +8,7 @@ sealed class Screen(val route: String) {
     
     // Main screens
     data object Chat : Screen("chat")
+    data object Call : Screen("call")
     data object Settings : Screen("settings")
     data object AccountManagement : Screen("account_management")
     data object FontSize : Screen("font_size")

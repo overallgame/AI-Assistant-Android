@@ -21,9 +21,7 @@ class DefaultChatWebSocketRepository @Inject constructor(
     override val events: SharedFlow<WebSocketEvent>
         get() = webSocketManager.events
 
-    override fun connect() {
-        webSocketManager.connect()
-    }
+    override fun connect() {}
 
     override fun disconnect() {
         webSocketManager.disconnect()
@@ -40,6 +38,8 @@ class DefaultChatWebSocketRepository @Inject constructor(
         webSocketManager.sendMessage(
             content = content,
             messageId = messageId,
+            thinkingEnabled = thinkingEnabled,
+            searchEnabled = searchEnabled,
             conversationHistory = conversationHistory,
         )
     }

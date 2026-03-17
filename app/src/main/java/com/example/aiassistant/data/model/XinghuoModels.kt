@@ -28,14 +28,14 @@ data class XinghuoParameter(
 data class XinghuoChat(
     val domain: String,
     @SerialName("max_tokens")
-    val maxTokens: Int = 4096,
-    val temperature: Float = 1.0f,
+    val maxTokens: Int = 65535,
+    val temperature: Float = 1.2f,
     @SerialName("top_k")
-    val topK: Int = 5,
+    val topK: Int = 6,
     @SerialName("presence_penalty")
-    val presencePenalty: Float = 0.0f,
+    val presencePenalty: Float = 2.01f,
     @SerialName("frequency_penalty")
-    val frequencyPenalty: Float = 0.0f,
+    val frequencyPenalty: Float = 0.001f,
     val thinking: XinghuoThinking? = null,
     val tools: List<XinghuoTool>? = null,
     @SerialName("chat_id")
@@ -44,7 +44,8 @@ data class XinghuoChat(
 
 @Serializable
 data class XinghuoThinking(
-    val type: String = "auto"
+    val type: String = "auto",
+    val enable: Boolean = false
 )
 
 @Serializable
@@ -128,6 +129,8 @@ data class XinghuoUsageText(
     val questionTokens: Int = 0,
     @SerialName("prompt_tokens")
     val promptTokens: Int = 0,
+    @SerialName("search_prompt_tokens")
+    val searchPromptTokens: Int = 0,
     @SerialName("completion_tokens")
     val completionTokens: Int = 0,
     @SerialName("total_tokens")

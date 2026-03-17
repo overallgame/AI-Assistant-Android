@@ -68,10 +68,12 @@ class DefaultMockApiHandler @Inject constructor() : MockApiHandler {
                         ?: existing.avatar.value
                     existing.copy(avatar = Avatar(type = avatarType, value = avatarValue))
                 }
+
                 request.containsKey("displayName") -> {
                     val displayName = request["displayName"]?.jsonPrimitive?.content
                     existing.copy(displayName = displayName)
                 }
+
                 else -> existing
             }
             users[userId] = updated

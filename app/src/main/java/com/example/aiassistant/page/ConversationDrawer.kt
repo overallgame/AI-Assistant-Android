@@ -148,7 +148,10 @@ fun ConversationDrawer(
                                         text = row.title,
                                         color = colors.onSurfaceVariant,
                                         style = MaterialTheme.typography.labelMedium,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
+                                        modifier = Modifier.padding(
+                                            horizontal = 6.dp,
+                                            vertical = 10.dp
+                                        ),
                                     )
                                 }
 
@@ -192,7 +195,8 @@ fun ConversationDrawer(
             ) {
                 val displayName = uiState.userInfo.displayName?.takeIf { it.isNotBlank() }
                 val primaryText = displayName ?: uiState.userInfo.phoneMasked.ifBlank { "未登录" }
-                val secondaryText = if (displayName != null && uiState.userInfo.phoneMasked.isNotBlank()) uiState.userInfo.phoneMasked else null
+                val secondaryText =
+                    if (displayName != null && uiState.userInfo.phoneMasked.isNotBlank()) uiState.userInfo.phoneMasked else null
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

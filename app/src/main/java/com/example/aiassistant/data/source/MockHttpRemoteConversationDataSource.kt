@@ -31,18 +31,19 @@ class MockHttpRemoteConversationDataSource(
         mockServerManager.ensureStarted(mockApiHandler, mockWsHandler)
     }
 
-    override suspend fun fetchConversationGroups(): List<ConversationGroup> = withContext(Dispatchers.IO) {
-        ensureStarted()
-        val request = Request.Builder()
-            .url("$baseUrl/api/conversations")
-            .get()
-            .build()
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Fetch conversations failed: ${response.code}")
-            val responseBody = response.body?.string() ?: error("Empty response body")
-            parseConversationGroups(responseBody)
+    override suspend fun fetchConversationGroups(): List<ConversationGroup> =
+        withContext(Dispatchers.IO) {
+            ensureStarted()
+            val request = Request.Builder()
+                .url("$baseUrl/api/conversations")
+                .get()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("Fetch conversations failed: ${response.code}")
+                val responseBody = response.body?.string() ?: error("Empty response body")
+                parseConversationGroups(responseBody)
+            }
         }
-    }
 
     private fun parseConversationGroups(responseBody: String): List<ConversationGroup> {
         val array = json.parseToJsonElement(responseBody).jsonArray
